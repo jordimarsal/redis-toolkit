@@ -12,3 +12,13 @@ target/
 # macOS / Windows / Linux
 .DS_Store
 Thumbs.db
+
+# Harness / SDD scaffolding (kept locally, not published)
+.claude/
+[C|A]*.md
+f*
+specs*
+verification*
+init.sh
+progress/
+specs/
