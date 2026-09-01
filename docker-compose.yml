@@ -1,0 +1,29 @@
+services:
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+
+  gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      GATEWAY_PORT: "8080"
+      BACKEND: ${BACKEND:-stub}
+      LLM_BASE_URL: http://llama-server:8080/v1
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  llama-server:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    profiles: ["llama"]
+    volumes:
+      - ./models:/models
+    command: ["--model", "/models/model.gguf"]
