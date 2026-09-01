@@ -261,4 +261,8 @@ passing test.
 
 ## License
 
-Provided as-is for demonstration and study purposes.
+Released under the [MIT License](LICENSE) — © 2026 Jordi Marsal.
+
+You are free to use, copy, modify, and redistribute this software, provided the
+original copyright and license notice are included in all copies. See
+[`LICENSE`](LICENSE) for the full text.
