@@ -16,7 +16,7 @@ services:
       REDIS_PORT: "6379"
       GATEWAY_PORT: "8080"
       BACKEND: ${BACKEND:-stub}
-      LLM_BASE_URL: http://llama-server:8080/v1
+      LLM_BASE_URL: https://llama-tls:8443/v1
     depends_on:
       redis:
         condition: service_healthy
@@ -27,3 +27,13 @@ services:
     volumes:
       - ./models:/models
     command: ["--model", "/models/model.gguf"]
+
+  # TLS terminator so the gateway can reach llama-server over https (it enforces https-only URLs).
+  # Self-signed internal certificate; for real deployments put your own reverse proxy here.
+  llama-tls:
+    image: caddy:2-alpine
+    profiles: ["llama"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - llama-server

@@ -97,6 +97,31 @@ class GatewayAppTest {
         assertThat(resp.body()).contains("Stub completion for");
     }
 
+    @Test
+    void oversizedPrompt_returns413_payloadTooLarge() throws Exception {
+        String bigPrompt = "a".repeat(5_000); // above the 4096-char prompt cap, below the body cap
+        HttpResponse<String> resp = post("{\"model\":\"stub\",\"prompt\":\"" + bigPrompt + "\"}");
+        assertThat(resp.statusCode()).isEqualTo(413);
+        assertThat(resp.body()).contains("payload_too_large");
+    }
+
+    @Test
+    void oversizedModel_returns413_payloadTooLarge() throws Exception {
+        String bigModel = "m".repeat(200); // above the 128-char model cap
+        HttpResponse<String> resp = post("{\"model\":\"" + bigModel + "\",\"prompt\":\"hi\"}");
+        assertThat(resp.statusCode()).isEqualTo(413);
+        assertThat(resp.body()).contains("payload_too_large");
+    }
+
+    @Test
+    void oversizedRawBody_returns413_evenIfFieldsAreSmall() throws Exception {
+        // Valid JSON with tiny fields but a raw body over the 8 KiB Content-Length cap.
+        String padded = "{\"model\":\"stub\",\"prompt\":\"hi\"" + " ".repeat(9 * 1024) + "}";
+        HttpResponse<String> resp = post(padded);
+        assertThat(resp.statusCode()).isEqualTo(413);
+        assertThat(resp.body()).contains("payload_too_large");
+    }
+
     private HttpResponse<String> post(String body) throws Exception {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + ROUTE))

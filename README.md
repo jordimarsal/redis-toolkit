@@ -81,12 +81,13 @@ BACKEND=llama docker compose --profile llama up --build
 | `REDIS_PORT`     | `6379`     | Redis port                                                     |
 | `LIMIT_PER_MINUTE` | `60`     | Token-bucket capacity per client key                         |
 | `BACKEND`        | `stub`     | Inference backend: `stub` or `llama`                          |
-| `LLM_BASE_URL`   | —          | Required when `BACKEND=llama` (e.g. `http://localhost:8080/v1`) |
+| `LLM_BASE_URL`   | —          | Required when `BACKEND=llama`. Must be an absolute `https://` URL with a host (plaintext is rejected) |
 
 ### Endpoints
 
-- **`POST /v1/completions`** — the guarded route. The JSON body is validated, quota-checked, and
-  then forwarded verbatim to the inference backend.
+- **`POST /v1/completions`** — the guarded route. The request body is size-capped (raw body ≤ 8 KiB,
+  prompt ≤ 4096 chars), quota-checked, and then forwarded to the inference backend. Oversized requests
+  are rejected with `413 payload_too_large` before any quota is consumed.
 - **`GET /metrics`** — Prometheus text exposition (`ratelimit_decisions_total`,
   `ratelimit_store_failures_total`, `ratelimit_degraded`, …).
 

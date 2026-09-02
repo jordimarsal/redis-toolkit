@@ -34,6 +34,9 @@ public final class GatewayApp {
     private static final String METRICS_ROUTE = "/metrics";
     private static final String DECISIONS_COUNTER = "ratelimit_decisions_total";
     private static final String DEFAULT_MODEL = "stub";
+    private static final int MAX_BODY_BYTES = 8 * 1024; // hard cap on the raw request body
+    private static final int MAX_PROMPT_LENGTH = 4_096; // chars, bounds LLM cost per request
+    private static final int MAX_MODEL_LENGTH = 128; // chars
 
     private final RateLimiterService service;
     private final KeyExtractor extractor;
@@ -149,11 +152,20 @@ public final class GatewayApp {
     }
 
     private void handleCompletions(Context ctx) {
+        if (exceedsBodyLimit(ctx)) {
+            writeJson(ctx, 413, Map.of(), new ErrorBody("payload_too_large", "Request body exceeds maximum allowed size"));
+            return;
+        }
+
         CompletionRequest request;
         try {
             request = parseRequest(ctx.body());
         } catch (Exception e) {
             writeJson(ctx, 400, Map.of(), new ErrorBody("bad_request", "Invalid JSON body"));
+            return;
+        }
+        if (!isWithinFieldLimits(request)) {
+            writeJson(ctx, 413, Map.of(), new ErrorBody("payload_too_large", "model or prompt exceeds maximum allowed length"));
             return;
         }
 
@@ -189,6 +201,24 @@ public final class GatewayApp {
             return new CompletionRequest(DEFAULT_MODEL, "");
         }
         return json.readValue(raw, CompletionRequest.class);
+    }
+
+    private static boolean exceedsBodyLimit(Context ctx) {
+        String contentLength = ctx.header("Content-Length");
+        if (contentLength == null || contentLength.isBlank()) {
+            return false; // chunked bodies are still bounded by the per-field limits below
+        }
+        try {
+            return Long.parseLong(contentLength.trim()) > MAX_BODY_BYTES;
+        } catch (NumberFormatException e) {
+            return true; // fail closed on malformed headers
+        }
+    }
+
+    private static boolean isWithinFieldLimits(CompletionRequest request) {
+        boolean modelOk = request.model() == null || request.model().length() <= MAX_MODEL_LENGTH;
+        boolean promptOk = request.prompt() == null || request.prompt().length() <= MAX_PROMPT_LENGTH;
+        return modelOk && promptOk;
     }
 
     private String resolveClientId(Context ctx) {

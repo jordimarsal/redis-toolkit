@@ -13,14 +13,14 @@ class LlamaServerBackendTest {
 
     @Test
     void requestBody_producesOpenAiCompatiblePayload() {
-        LlamaServerBackend backend = new LlamaServerBackend(URI.create("http://localhost"), HttpClient.newHttpClient(), json);
+        LlamaServerBackend backend = new LlamaServerBackend(URI.create("https://llama.local/v1"), HttpClient.newHttpClient(), json);
         String body = backend.requestBody(new CompletionRequest("my-model", "say hi"));
         assertThat(body).contains("\"model\":\"my-model\"").contains("\"prompt\":\"say hi\"");
     }
 
     @Test
     void parseResponse_extractsGeneratedText_fromChoices() {
-        LlamaServerBackend backend = new LlamaServerBackend(URI.create("http://localhost"), HttpClient.newHttpClient(), json);
+        LlamaServerBackend backend = new LlamaServerBackend(URI.create("https://llama.local/v1"), HttpClient.newHttpClient(), json);
         Completion completion = backend.parseResponse("{\"id\":\"abc\",\"choices\":[{\"text\":\"hello world\"}]}");
         assertThat(completion.text()).isEqualTo("hello world");
         assertThat(completion.id()).isEqualTo("abc");
@@ -28,7 +28,7 @@ class LlamaServerBackendTest {
 
     @Test
     void parseResponse_extractsGeneratedText_fromCompletionField() {
-        LlamaServerBackend backend = new LlamaServerBackend(URI.create("http://localhost"), HttpClient.newHttpClient(), json);
+        LlamaServerBackend backend = new LlamaServerBackend(URI.create("https://llama.local/v1"), HttpClient.newHttpClient(), json);
         Completion completion = backend.parseResponse("{\"completion\":\"fallback text\"}");
         assertThat(completion.text()).isEqualTo("fallback text");
     }
@@ -36,7 +36,7 @@ class LlamaServerBackendTest {
     @Test
     void backends_areInterchangeable_behindPort() {
         InferenceBackend stub = new StubBackend();
-        InferenceBackend llama = new LlamaServerBackend(URI.create("http://localhost"), HttpClient.newHttpClient(), json);
+        InferenceBackend llama = new LlamaServerBackend(URI.create("https://llama.local/v1"), HttpClient.newHttpClient(), json);
         assertThat(stub.complete(new CompletionRequest("stub", "hi")).text()).isNotBlank();
         assertThat(llama).isInstanceOf(InferenceBackend.class);
     }

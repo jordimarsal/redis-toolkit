@@ -1,10 +1,7 @@
 package net.jordimp.redistoolkit.gateway.backend;
 
-import java.util.regex.Pattern;
-
 public final class StubBackend implements InferenceBackend {
 
-    private static final Pattern HTML_SPECIAL_CHARS = Pattern.compile("[&<>\"']");
     private static final int MAX_PROMPT_LENGTH = 480;
 
     @Override
@@ -16,10 +13,15 @@ public final class StubBackend implements InferenceBackend {
         return new Completion("stub-1", "Stub completion for: \"" + sanitizedPrompt + "\"");
     }
 
-    private static String sanitizePrompt(String prompt) {
+    static String sanitizePrompt(String prompt) {
         if (prompt.length() > MAX_PROMPT_LENGTH) {
             prompt = prompt.substring(0, MAX_PROMPT_LENGTH);
         }
-        return HTML_SPECIAL_CHARS.matcher(prompt).replaceAll("\\$0");
+        // Escape order matters: '&' first so previously inserted entities are not double-escaped.
+        return prompt.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }

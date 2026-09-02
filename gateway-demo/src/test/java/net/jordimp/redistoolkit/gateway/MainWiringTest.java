@@ -65,8 +65,8 @@ class MainWiringTest {
     }
 
     @Test
-    void createBackend_returnsLlamaBackend_whenTypeIsLlamaWithBaseUrl() {
-        InferenceBackend backend = Main.createBackend("llama", "http://localhost:8080/v1");
+    void createBackend_returnsLlamaBackend_whenTypeIsLlamaWithHttpsUrl() {
+        InferenceBackend backend = Main.createBackend("llama", "https://llama-tls:8443/v1");
 
         assertThat(backend).isInstanceOf(LlamaServerBackend.class);
     }
@@ -77,6 +77,20 @@ class MainWiringTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("LLM_BASE_URL");
         assertThatThrownBy(() -> Main.createBackend("llama", "  "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("LLM_BASE_URL");
+    }
+
+    @Test
+    void createBackend_throwsIllegalArgument_whenLlamaUrlIsNotHttps() {
+        assertThatThrownBy(() -> Main.createBackend("llama", "http://localhost:8080/v1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("https");
+    }
+
+    @Test
+    void createBackend_throwsIllegalArgument_whenLlamaUrlIsMalformed() {
+        assertThatThrownBy(() -> Main.createBackend("llama", "ht!tp://bad url"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("LLM_BASE_URL");
     }

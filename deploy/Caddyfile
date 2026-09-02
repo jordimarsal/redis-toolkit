@@ -1,0 +1,10 @@
+{
+	admin off
+}
+
+# TLS terminator for the local demo stack: self-signed internal certificate.
+# Replace with your own reverse proxy (and real certificates) in real deployments.
+:8443 {
+	tls internal
+	reverse_proxy llama-server:8080
+}

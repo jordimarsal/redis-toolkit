@@ -24,6 +24,9 @@ public final class LlamaServerBackend implements InferenceBackend {
 
     public LlamaServerBackend(URI baseUrl, HttpClient client, ObjectMapper json) {
         this.baseUrl = Objects.requireNonNull(baseUrl, "baseUrl");
+        if (!isValidLlamaBaseUrl(this.baseUrl)) {
+            throw new IllegalArgumentException("LLM_BASE_URL must be an absolute https:// URL with a host: " + baseUrl);
+        }
         this.client = Objects.requireNonNull(client, "client");
         this.json = Objects.requireNonNull(json, "json");
     }
@@ -44,10 +47,6 @@ public final class LlamaServerBackend implements InferenceBackend {
             targetUri = baseUrl.resolve(PATH);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid base URL: " + baseUrl, e);
-        }
-
-        if (!isValidLlamaBaseUrl(baseUrl)) {
-            throw new IllegalArgumentException("LLM_BASE_URL must be an absolute https:// URL");
         }
 
         HttpRequest httpRequest = HttpRequest.newBuilder()

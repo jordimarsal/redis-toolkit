@@ -26,7 +26,8 @@ class ComposeFileTest {
         Map<String, Object> doc = compose();
         Map<String, Object> services = asMap(doc.get("services"));
 
-        assertThat(services.keySet()).containsExactlyInAnyOrder("redis", "gateway", "llama-server");
+        assertThat(services.keySet())
+                .containsExactlyInAnyOrder("redis", "gateway", "llama-server", "llama-tls");
 
         Map<String, Object> redis = asMap(services.get("redis"));
         assertThat(redis.get("image")).isEqualTo("redis:7");
@@ -40,6 +41,18 @@ class ComposeFileTest {
         Map<String, Object> env = asMap(gateway.get("environment"));
         assertThat(env).containsKeys("REDIS_HOST", "BACKEND", "LLM_BASE_URL");
         assertThat(String.valueOf(env.get("REDIS_HOST"))).isEqualTo("redis");
+        // The gateway enforces https:// for LLM_BASE_URL; compose must not ship a plaintext URL.
+        assertThat(String.valueOf(env.get("LLM_BASE_URL"))).startsWith("https://");
+    }
+
+    @Test
+    void llamaTlsTerminatorIsOptInProfile() throws Exception {
+        Map<String, Object> doc = compose();
+        Map<String, Object> services = asMap(doc.get("services"));
+        Map<String, Object> tls = asMap(services.get("llama-tls"));
+
+        assertThat(asList(tls.get("profiles"))).containsExactly("llama");
+        assertThat(asList(tls.get("depends_on"))).containsExactly("llama-server");
     }
 
     @Test
