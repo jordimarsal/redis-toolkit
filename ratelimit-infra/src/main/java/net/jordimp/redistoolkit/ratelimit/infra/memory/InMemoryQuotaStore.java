@@ -14,14 +14,27 @@ import java.util.Map;
 
 public class InMemoryQuotaStore implements QuotaStore {
 
-    private static final int MAX_BUCKETS = 10_000;
+    /** Default LRU cap: beyond this many distinct keys the least-recently-used bucket is evicted (and its quota resets). */
+    public static final int DEFAULT_MAX_BUCKETS = 10_000;
 
-    private final Map<String, TokenBucketState> buckets = new LinkedHashMap<String, TokenBucketState>(16, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, TokenBucketState> eldest) {
-            return size() > MAX_BUCKETS;
+    private final Map<String, TokenBucketState> buckets;
+
+    public InMemoryQuotaStore() {
+        this(DEFAULT_MAX_BUCKETS);
+    }
+
+    public InMemoryQuotaStore(int maxBuckets) {
+        if (maxBuckets < 1) {
+            throw new IllegalArgumentException("maxBuckets must be >= 1, got " + maxBuckets);
         }
-    };
+        int cap = maxBuckets;
+        this.buckets = new LinkedHashMap<String, TokenBucketState>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, TokenBucketState> eldest) {
+                return size() > cap;
+            }
+        };
+    }
 
     @Override
     public Decision evaluateAndConsume(QuotaKey key, RateLimitSpec spec, Instant now) {

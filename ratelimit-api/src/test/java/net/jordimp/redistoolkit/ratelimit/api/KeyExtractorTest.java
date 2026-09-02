@@ -42,4 +42,18 @@ class KeyExtractorTest {
         assertThatThrownBy(() -> extractor.extract(Dimension.MODEL, "   "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void r3_rejectsOversizedValue() {
+        assertThatThrownBy(() -> extractor.extract(Dimension.IP, "x".repeat(129)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maximum length");
+    }
+
+    @Test
+    void r3_rejectsControlCharactersInValue() {
+        assertThatThrownBy(() -> extractor.extract(Dimension.TENANT, "a\0b"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("control characters");
+    }
 }

@@ -17,6 +17,11 @@ public record Decision(boolean allowed, long remaining, long limit, Duration ret
         return Math.max(0L, retryAfter.getSeconds());
     }
 
+    /**
+     * Renders rate-limit response headers. Note: {@code X-RateLimit-Reset} carries seconds until
+     * the next token becomes available (0 while allowed), not an epoch timestamp; {@code Retry-After}
+     * mirrors it and is only present when positive.
+     */
     public Map<String, String> headers() {
         Map<String, String> h = new LinkedHashMap<>();
         h.put("X-RateLimit-Limit", String.valueOf(limit));

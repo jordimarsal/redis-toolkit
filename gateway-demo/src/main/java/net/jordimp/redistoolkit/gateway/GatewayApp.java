@@ -94,7 +94,14 @@ public final class GatewayApp {
         int bound = (port == 0) ? firstFreePort() : port;
         this.actualPort = bound;
         this.app = Javalin.create();
-        this.clientIdHeader = System.getenv("RATELIMIT_CLIENT_ID");
+        String envHeader = System.getenv("RATELIMIT_CLIENT_ID");
+        if (this.clientIdHeader == null && envHeader != null && !envHeader.isBlank()) {
+            this.clientIdHeader = envHeader.trim();
+        }
+        if (this.clientIdHeader != null) {
+            System.err.println("WARNING: RATELIMIT_CLIENT_ID='" + this.clientIdHeader + "' makes the quota identity come from a "
+                    + "client-controlled header. Only enable this if the header is injected by a trusted authentication layer.");
+        }
         this.app.post(ROUTE, this::handleCompletions);
         if (metricsRegistry != null) {
             this.app.get(METRICS_ROUTE, this::handleMetrics);
@@ -105,6 +112,11 @@ public final class GatewayApp {
 
     public int port() {
         return actualPort;
+    }
+
+    /** Package-private test seam: pins the client-identifier header name before {@link #start(int)}. */
+    void setClientIdHeader(String headerName) {
+        this.clientIdHeader = headerName;
     }
 
     public void stop() {
@@ -169,10 +181,18 @@ public final class GatewayApp {
             return;
         }
 
+        QuotaKey key;
+        try {
+            key = extractor.extract(Dimension.IP, resolveClientId(ctx));
+        } catch (IllegalArgumentException e) {
+            writeJson(ctx, 400, Map.of(), new ErrorBody("invalid_client_id",
+                    "Client identifier exceeds allowed length or contains invalid characters"));
+            return;
+        }
+
         Decision decision;
         Object successBody = null;
         try {
-            QuotaKey key = extractor.extract(Dimension.IP, resolveClientId(ctx));
             Optional<RateLimitSpec> specOpt = registry.find(ROUTE);
             if (specOpt.isEmpty()) {
                 decision = Decision.rejected(Reason.CONFIG_ERROR, 0L, Duration.ZERO);
@@ -182,8 +202,6 @@ public final class GatewayApp {
                     successBody = backend.complete(request);
                 }
             }
-        } catch (IllegalArgumentException e) {
-            decision = Decision.rejected(Reason.CONFIG_ERROR, 0L, Duration.ZERO);
         } catch (RuntimeException e) {
             writeJson(ctx, 500, Map.of(), new ErrorBody("backend_error", "Inference backend failure"));
             return;

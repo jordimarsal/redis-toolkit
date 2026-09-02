@@ -35,6 +35,29 @@ class QuotaKeyTest {
     }
 
     @Test
+    void rejectsValueLongerThan128Chars() {
+        assertThatThrownBy(() -> new QuotaKey("a".repeat(129), Dimension.IP))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maximum length");
+    }
+
+    @Test
+    void acceptsValueOfExactly128Chars() {
+        QuotaKey key = new QuotaKey("a".repeat(128), Dimension.IP);
+        assertThat(key.value()).hasSize(128);
+        assertThat(key.render()).isEqualTo("ratelimit:ip:" + "a".repeat(128));
+    }
+
+    @Test
+    void rejectsControlCharactersInValue() {
+        assertThatThrownBy(() -> new QuotaKey("bad\nkey", Dimension.TENANT))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("control characters");
+        assertThatThrownBy(() -> new QuotaKey("tab\there", Dimension.MODEL))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void r07_equalityRequiresValueAndDimension() {
         QuotaKey a = new QuotaKey("acme", Dimension.TENANT);
         assertThat(a).isEqualTo(new QuotaKey("acme", Dimension.TENANT));

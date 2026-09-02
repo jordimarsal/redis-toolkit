@@ -22,6 +22,14 @@ public class RedisQuotaStore implements QuotaStore, AutoCloseable {
             local now_ms   = tonumber(ARGV[3])
             local ttl_ms   = tonumber(ARGV[4])
 
+            -- Clamp caller-supplied time to the server clock: an instance with a fast system
+            -- clock cannot over-refill tokens beyond real time (slow clocks under-refill only).
+            local srv       = redis.call('TIME')
+            local server_ms = tonumber(srv[1]) * 1000 + math.floor(tonumber(srv[2]) / 1000)
+            if now_ms > server_ms then
+              now_ms = server_ms
+            end
+
             local data   = redis.call('HMGET', key, 'tokens', 'last')
             local tokens = tonumber(data[1])
             if tokens == nil then tokens = capacity end

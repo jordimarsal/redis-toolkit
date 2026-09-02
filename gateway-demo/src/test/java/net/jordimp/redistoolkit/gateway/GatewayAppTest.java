@@ -35,16 +35,20 @@ class GatewayAppTest {
 
     @BeforeEach
     void startGateway() {
+        GatewayApp app = buildGateway();
+        javalin = app.start(0);
+        port = app.port();
+        http = HttpClient.newHttpClient();
+    }
+
+    private static GatewayApp buildGateway() {
         Clock clock = () -> T0;
         RateLimiterService service = new RateLimiterService(clock, new InMemoryQuotaStore());
         KeyExtractor extractor = new KeyExtractor();
         RateLimitRegistry registry = new RateLimitRegistry(Map.of(ROUTE, RateLimitSpec.perMinute(3)));
         DecisionMapper mapper = new DecisionMapper();
         ObjectMapper json = new ObjectMapper();
-        GatewayApp app = new GatewayApp(service, extractor, registry, mapper, new StubBackend(), json);
-        javalin = app.start(0);
-        port = app.port();
-        http = HttpClient.newHttpClient();
+        return new GatewayApp(service, extractor, registry, mapper, new StubBackend(), json);
     }
 
     @AfterEach
@@ -122,12 +126,52 @@ class GatewayAppTest {
         assertThat(resp.body()).contains("payload_too_large");
     }
 
+    @Test
+    void oversizedClientIdentifier_returns400_invalidClientId() throws Exception {
+        javalin.stop();
+        GatewayApp app = buildGateway();
+        app.setClientIdHeader("X-Client");
+        Javalin second = app.start(0);
+        try {
+            HttpResponse<String> resp = postTo(app.port(), "{\"model\":\"stub\",\"prompt\":\"hi\"}", "z".repeat(129));
+            assertThat(resp.statusCode()).isEqualTo(400);
+            assertThat(resp.body()).contains("invalid_client_id");
+        } finally {
+            second.stop();
+        }
+    }
+
+    @Test
+    void distinctClientIdentifiers_getIndependentBudgets_whenHeaderConfigured() throws Exception {
+        javalin.stop();
+        GatewayApp app = buildGateway();
+        app.setClientIdHeader("X-Client");
+        Javalin second = app.start(0);
+        try {
+            int p = app.port();
+            for (int i = 0; i < 3; i++) {
+                assertThat(postTo(p, "{\"model\":\"stub\",\"prompt\":\"a\"}", "client-A").statusCode())
+                        .as("request %d as client-A", i).isEqualTo(200);
+            }
+            // Same source IP, different identity: must still be admitted from its own budget.
+            assertThat(postTo(p, "{\"model\":\"stub\",\"prompt\":\"b\"}", "client-B").statusCode()).isEqualTo(200);
+        } finally {
+            second.stop();
+        }
+    }
+
     private HttpResponse<String> post(String body) throws Exception {
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:" + port + ROUTE))
+        return postTo(port, body, null);
+    }
+
+    private HttpResponse<String> postTo(int targetPort, String body, String clientId) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + targetPort + ROUTE))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        return http.send(req, HttpResponse.BodyHandlers.ofString());
+                .POST(HttpRequest.BodyPublishers.ofString(body));
+        if (clientId != null) {
+            builder.header("X-Client", clientId);
+        }
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 }

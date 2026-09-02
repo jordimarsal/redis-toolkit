@@ -82,6 +82,8 @@ BACKEND=llama docker compose --profile llama up --build
 | `LIMIT_PER_MINUTE` | `60`     | Token-bucket capacity per client key                         |
 | `BACKEND`        | `stub`     | Inference backend: `stub` or `llama`                          |
 | `LLM_BASE_URL`   | —          | Required when `BACKEND=llama`. Must be an absolute `https://` URL with a host (plaintext is rejected) |
+| `RATELIMIT_CLIENT_ID` | unset    | Header name whose value becomes the quota identity instead of the source IP. **Only set this if the header is injected by a trusted authentication layer** — otherwise clients can rotate it to bypass limits |
+| `RATELIMIT_KEY_PREFIX` | `gateway-demo` | Redis key prefix for bucket state. Keep identical across replicas so they share one global budget |
 
 ### Endpoints
 
@@ -98,15 +100,18 @@ On every decision the mapper renders standard rate-limit headers:
 ```
 X-RateLimit-Limit: <limit>
 X-RateLimit-Remaining: <remaining>
-X-RateLimit-Reset: <epoch_seconds>
-Retry-After: <seconds>      # only on HTTP 429
+X-RateLimit-Reset: <seconds until next token; 0 while allowed>   # not an epoch timestamp
+Retry-After: <seconds>      # only when positive (HTTP 429)
 ```
 
 ### Testing the rate limit
 
 The client key is derived from the request IP, so every call from the same host shares one budget.
 With no `REDIS_HOST` configured the store is in-memory and single-instance; with `REDIS_HOST` set,
-all replicas share one budget.
+all replicas sharing the same `RATELIMIT_KEY_PREFIX` count against one global budget.
+
+Client identifiers are capped at 128 characters and may not contain control characters; violations
+are rejected with `400 invalid_client_id` before any quota is consumed.
 
 Under the limit you get `200` plus `X-RateLimit-Limit / Remaining / Reset`:
 
@@ -152,7 +157,14 @@ depends on the JDK alone, so infrastructure can never leak into the domain.
 **Request flow.** `KeyExtractor` builds the client key → the registry resolves the
 `RateLimitSpec` → `evaluateAndConsume(key, spec, now)` runs atomically inside the store → the
 mapper renders either headers or a `429`. When Redis fails, `ResilientQuotaStore` falls back to
-the local store and reports it through metrics instead of dropping traffic silently.
+the local store and reports it through metrics instead of dropping traffic silently. That fallback
+is fail-open by design: during an outage each instance serves from its own fresh in-memory buckets,
+so the effective limit relaxes to roughly N×spec until Redis recovers (`ratelimit_degraded=1`).
+Prefer rejecting all traffic while the shared store is down? Wire `FailurePolicy.FAIL_CLOSED`
+instead (responses become `503 store_unavailable`).
+
+The token bucket also clamps caller-supplied timestamps to the Redis server clock inside the Lua
+script, so replicas with skewed system clocks cannot over-refill tokens beyond real time.
 
 ```
 HTTP request

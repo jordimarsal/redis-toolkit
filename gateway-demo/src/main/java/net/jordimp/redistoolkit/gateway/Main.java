@@ -33,6 +33,9 @@ public final class Main {
     private static final int DEFAULT_PORT = 8080;
     private static final int DEFAULT_LIMIT_PER_MINUTE = 60;
 
+    /** Stable by default so all replicas sharing one Redis count against the same global budget. */
+    private static final String DEFAULT_RATELIMIT_KEY_PREFIX = "gateway-demo";
+
     private static final int REDIS_SOCKET_TIMEOUT_MS = 10_000;
     private static final int REDIS_CONNECT_TIMEOUT_MS = 10_000;
     private static final long REDIS_MIN_EVICTABLE_IDLE_MS = 300_000L; // 5 minutes
@@ -75,7 +78,7 @@ public final class Main {
                 .socketTimeoutMillis(REDIS_SOCKET_TIMEOUT_MS)
                 .build();
         JedisPool pool = new JedisPool(poolConfig, new HostAndPort(redisHost, redisPort), clientConfig);
-        RedisQuotaStore primary = new RedisQuotaStore(pool);
+        RedisQuotaStore primary = new RedisQuotaStore(pool, resolveKeyPrefix());
         ResilientQuotaStore resilient = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, metrics);
         return new StoreWiring(resilient, resilient);
     }
@@ -112,6 +115,15 @@ public final class Main {
             }
         }
         return DEFAULT_REDIS_PORT;
+    }
+
+    /** Keep identical across replicas so they share one global budget; override only for isolated environments. */
+    static String resolveKeyPrefix() {
+        String raw = System.getenv("RATELIMIT_KEY_PREFIX");
+        if (raw != null && !raw.isBlank()) {
+            return raw.trim();
+        }
+        return DEFAULT_RATELIMIT_KEY_PREFIX;
     }
 
     private static int parseLimitPerMinute() {
