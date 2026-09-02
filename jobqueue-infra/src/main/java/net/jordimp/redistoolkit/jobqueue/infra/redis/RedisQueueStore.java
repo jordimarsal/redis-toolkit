@@ -12,12 +12,15 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.StreamEntryID;
 import redis.clients.jedis.resps.StreamEntry;
+import redis.clients.jedis.resps.ScanResult;
+import redis.clients.jedis.params.ScanParams;
 import redis.clients.jedis.params.XAddParams;
 import redis.clients.jedis.params.XReadGroupParams;
 
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,6 +29,10 @@ import java.util.Set;
 public final class RedisQueueStore implements QueueStore {
 
     private static final int SEEN_TTL_SECONDS = 60;
+
+    private static final String SEEN_CHECK_AND_SET =
+        "if redis.call('EXISTS', KEYS[1]) == 1 then return '0' end "
+        + "redis.call('SETEX', KEYS[1], ARGV[1], '1') return '1'";
 
     private final String queueName;
     private final JedisPool pool;
@@ -94,11 +101,8 @@ public final class RedisQueueStore implements QueueStore {
             String id = entry.getID().toString();
             Map<String, String> fields = entry.getFields();
             String dedupKey = fields.get("dedup");
-            if (dedupKey != null && seenExists(dedupKey)) {
+            if (dedupKey != null && !isNewlyMarkedSeen(dedupKey)) {
                 continue;
-            }
-            if (dedupKey != null) {
-                markSeen(dedupKey);
             }
             try (Jedis jedis = pool.getResource()) {
                 jedis.sadd(pendingKey(groupId), id);
@@ -124,10 +128,7 @@ public final class RedisQueueStore implements QueueStore {
     @Override
     public int reclaimPending(int maxClaim) {
         int moved = 0;
-        Set<String> pendingKeys;
-        try (Jedis jedis = pool.getResource()) {
-            pendingKeys = jedis.keys(pendingPattern());
-        }
+        Set<String> pendingKeys = collectPendingGroupKeys();
         for (String pendingKey : pendingKeys) {
             List<String> ids;
             try (Jedis jedis = pool.getResource()) {
@@ -165,10 +166,7 @@ public final class RedisQueueStore implements QueueStore {
     @Override
     public PendingStats pendingStats() {
         long total = 0L;
-        Set<String> pendingKeys;
-        try (Jedis jedis = pool.getResource()) {
-            pendingKeys = jedis.keys(pendingPattern());
-        }
+        Set<String> pendingKeys = collectPendingGroupKeys();
         for (String pendingKey : pendingKeys) {
             try (Jedis jedis = pool.getResource()) {
                 total += jedis.scard(pendingKey);
@@ -190,9 +188,22 @@ public final class RedisQueueStore implements QueueStore {
         int promoted = 0;
         for (String member : members) {
             String[] parts = member.split("\\|", -1);
-            Priority priority = Priority.valueOf(parts[0]);
+            if (parts.length < 3) {
+                continue;
+            }
+            final Priority priority;
+            try {
+                priority = Priority.valueOf(parts[0]);
+            } catch (RuntimeException e) {
+                continue;
+            }
             String dedupKey = parts.length > 1 && !parts[1].isEmpty() ? parts[1] : null;
-            byte[] payloadBytes = Base64.getDecoder().decode(parts[2]);
+            final byte[] payloadBytes;
+            try {
+                payloadBytes = Base64.getDecoder().decode(parts[2]);
+            } catch (RuntimeException e) {
+                continue;
+            }
             Map<String, String> fields = new HashMap<>();
             fields.put("payload", new String(Base64.getEncoder().encodeToString(payloadBytes)));
             if (dedupKey != null) {
@@ -223,16 +234,24 @@ public final class RedisQueueStore implements QueueStore {
         }
     }
 
-    private boolean seenExists(String dedupKey) {
+    private boolean isNewlyMarkedSeen(String dedupKey) {
         try (Jedis jedis = pool.getResource()) {
-            return jedis.exists(seenKey(dedupKey));
+            Object result = jedis.eval(SEEN_CHECK_AND_SET, 1, seenKey(dedupKey), String.valueOf(SEEN_TTL_SECONDS));
+            return "1".equals(String.valueOf(result));
         }
     }
 
-    private void markSeen(String dedupKey) {
+    private Set<String> collectPendingGroupKeys() {
+        Set<String> keys = new HashSet<>();
+        String cursor = "0";
         try (Jedis jedis = pool.getResource()) {
-            jedis.setex(seenKey(dedupKey), SEEN_TTL_SECONDS, "1");
+            do {
+                ScanResult<String> result = jedis.scan(cursor, new ScanParams().match(pendingPattern()).count(1000));
+                keys.addAll(result.getResult());
+                cursor = result.getCursor();
+            } while (!cursor.equals("0"));
         }
+        return keys;
     }
 
     private String redisGroup(String groupId) {

@@ -11,6 +11,7 @@ import java.util.function.Consumer;
 public final class WorkerLoop {
 
     private static final int DEFAULT_BATCH = 10;
+    private static final int MAX_CONSECUTIVE_FAILURES = 100;
 
     private final String groupId;
     private final QueueStore store;
@@ -66,8 +67,19 @@ public final class WorkerLoop {
     }
 
     private void runLoop() {
+        int consecutiveFailures = 0;
         while (running.get()) {
-            int processed = pollAndProcess(DEFAULT_BATCH);
+            int processed;
+            try {
+                processed = pollAndProcess(DEFAULT_BATCH);
+            } catch (RuntimeException e) {
+                consecutiveFailures++;
+                if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    break;
+                }
+                continue;
+            }
+            consecutiveFailures = 0;
             if (processed == 0 && !running.get()) {
                 break;
             }

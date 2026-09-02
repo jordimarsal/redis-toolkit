@@ -17,9 +17,11 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.LinkedHashMap;
 
 public final class InMemoryQueueStore implements QueueStore {
 
+    private static final int MAX_SEEN_ENTRIES = 10_000;
     private static final long SEEN_TTL_MS = 60_000L;
 
     private record Stored(JobId jobId, Payload payload, String dedupKey, Priority priority) {
@@ -29,7 +31,12 @@ public final class InMemoryQueueStore implements QueueStore {
     private final Map<Priority, List<Stored>> allJobs = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, List<Stored>> pendingByGroup = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Set<JobId>> ackedByGroup = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, Long> seen = new ConcurrentHashMap<>();
+    private final Map<String, Long> seen = new LinkedHashMap<String, Long>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
+            return size() > MAX_SEEN_ENTRIES;
+        }
+    };
     private final TreeMap<Long, Stored> delayed = new TreeMap<>();
 
     public InMemoryQueueStore(String queueName) {
@@ -89,6 +96,9 @@ public final class InMemoryQueueStore implements QueueStore {
     public synchronized void acknowledge(String groupId, ClaimedJob claimed) {
         pendingByGroup.computeIfAbsent(groupId, k -> new java.util.ArrayList<>()).removeIf(s -> s.jobId().equals(claimed.jobId()));
         ackedByGroup.computeIfAbsent(groupId, k -> new java.util.HashSet<>()).add(claimed.jobId());
+        for (List<Stored> jobs : allJobs.values()) {
+            jobs.removeIf(stored -> stored.jobId().equals(claimed.jobId()));
+        }
     }
 
     @Override

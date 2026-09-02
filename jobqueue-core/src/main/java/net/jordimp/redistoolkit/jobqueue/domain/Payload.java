@@ -5,6 +5,8 @@ import java.util.Objects;
 
 public final class Payload {
 
+    private static final long MAX_PAYLOAD_BYTES = 1L << 20;
+
     private final byte[] data;
 
     private Payload(byte[] data) {
@@ -13,6 +15,9 @@ public final class Payload {
 
     public static Payload of(byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes");
+        if (bytes.length > MAX_PAYLOAD_BYTES) {
+            throw new IllegalArgumentException("Payload exceeds max size of " + MAX_PAYLOAD_BYTES + " bytes");
+        }
         return new Payload(bytes);
     }
 
