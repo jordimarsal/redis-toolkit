@@ -40,8 +40,12 @@ Maven multi-module reactor. Base package: `net.jordimp.redistoolkit`.
 | `ratelimit-api`   | `...toolkit.ratelimit.api.*`                   | DTOs, `KeyExtractor`, `RateLimitRegistry`, mapper, `ApiResponse` | core (+infra)|
 | `gateway-demo`    | `...toolkit.gateway.*`                         | Javalin HTTP entrypoint, `InferenceBackend` + `Stub`/`LlamaServer` | api (+infra) |
 
-Reserved for pass 2 (not created until their feature is `spec_ready`):
-`jobqueue-core`, `jobqueue-infra`, `jobqueue-api`.
+| Module            | Package root                                    | Contains                                                             | Depends on    |
+|-------------------|-------------------------------------------------|---------------------------------------------------------------------|---------------|
+| `jobqueue-core`   | `...toolkit.jobqueue.{domain,port,usecase}`     | VOs (`JobId`,`Payload`,`Priority`,`ClaimedJob`), `QueueStore`,`Metrics`, `WorkerLoop` | JDK only      |
+| `jobqueue-infra`  | `...toolkit.jobqueue.infra.{memory,redis,metrics}` | `InMemoryQueueStore`, `RedisQueueStore` (Streams/consumer groups/Lua/delay-set), `InMemoryMetrics` | core    |
+
+`jobqueue-api` remains reserved for a future gateway-facing adapter (pass 3).
 
 Rule: `src/` must only contain the modules above. Any new module requires an update to this
 table first.

@@ -12,14 +12,16 @@
   <name>redis-toolkit (parent)</name>
   <description>Distributed rate limiter + job queue toolkit backed by Redis, demonstrated as an LLM inference gateway.</description>
 
-  <!-- Modules are added here as their features land in the SDD workflow:
-       ratelimit-core, ratelimit-infra, ratelimit-api, gateway-demo -->
+    <!-- Modules are added here as their features land in the SDD workflow:
+         ratelimit-core, ratelimit-infra, ratelimit-api, gateway-demo, jobqueue-core, jobqueue-infra -->
 
     <modules>
       <module>ratelimit-core</module>
       <module>ratelimit-infra</module>
       <module>ratelimit-api</module>
       <module>gateway-demo</module>
+      <module>jobqueue-core</module>
+      <module>jobqueue-infra</module>
     </modules>
 
   <properties>
