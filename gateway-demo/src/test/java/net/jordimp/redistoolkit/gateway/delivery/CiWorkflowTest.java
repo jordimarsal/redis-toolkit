@@ -23,7 +23,7 @@ class CiWorkflowTest {
     }
 
     @Test
-    void runsInitShOnPushAndPullRequest_withConcurrencyGroup() throws Exception {
+    void runsMvnTestOnPushAndPullRequest_withConcurrencyGroup() throws Exception {
         Map<String, Object> doc = workflow();
 
         Map<String, Object> on = asMap(doc.get("on"));
@@ -40,7 +40,9 @@ class CiWorkflowTest {
         String allSteps = steps.stream()
                 .map(s -> String.valueOf(asMap(s).getOrDefault("run", "")))
                 .collect(Collectors.joining("\n"));
-        assertThat(allSteps).contains("./init.sh");
+        // CI runs the real build/tests directly; it must not depend on the harness (init.sh).
+        assertThat(allSteps).contains("mvn test");
+        assertThat(allSteps).doesNotContain("./init.sh");
 
         List<Object> styleSteps = asList(asMap(jobs.get("style")).get("steps"));
         String styleRun = styleSteps.stream()

@@ -15,6 +15,7 @@ Thumbs.db
 
 # Harness / SDD scaffolding (kept locally, not published)
 .claude/
+init.sh
 [C|A]*.md
 f*
 specs*

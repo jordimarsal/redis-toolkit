@@ -19,7 +19,7 @@ jobs:
           java-version: "25"
           cache: maven
       - name: Build + unit/integration tests
-        run: ./init.sh
+        run: mvn test
 
   style:
     runs-on: ubuntu-latest
