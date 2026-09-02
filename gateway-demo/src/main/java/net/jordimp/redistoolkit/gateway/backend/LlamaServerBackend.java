@@ -28,15 +28,36 @@ public final class LlamaServerBackend implements InferenceBackend {
         this.json = Objects.requireNonNull(json, "json");
     }
 
+    private static boolean isValidLlamaBaseUrl(URI uri) {
+        if (uri == null || !uri.isAbsolute()) {
+            return false;
+        }
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        return "https".equalsIgnoreCase(scheme) && host != null && !host.isEmpty();
+    }
+
     @Override
     public Completion complete(CompletionRequest request) {
+        URI targetUri;
         try {
-            HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(baseUrl.resolve(PATH))
-                    .header("Content-Type", "application/json")
-                    .timeout(RESPONSE_TIMEOUT)
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody(request)))
-                    .build();
+            targetUri = baseUrl.resolve(PATH);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid base URL: " + baseUrl, e);
+        }
+
+        if (!isValidLlamaBaseUrl(baseUrl)) {
+            throw new IllegalArgumentException("LLM_BASE_URL must be an absolute https:// URL");
+        }
+
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(targetUri)
+                .header("Content-Type", "application/json")
+                .timeout(RESPONSE_TIMEOUT)
+                .POST(HttpRequest.BodyPublishers.ofString(requestBody(request)))
+                .build();
+
+        try {
             HttpResponse<String> response = client.send(httpRequest, HttpResponse.BodyHandlers.ofString());
             return parseResponse(response.body());
         } catch (InterruptedException e) {
