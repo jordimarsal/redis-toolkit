@@ -38,15 +38,7 @@ gateway in under a minute.
 
 **Prerequisites:** JDK 25, Maven 3.9+. Docker is only needed for the compose demo.
 
-### 1. Verify the environment
-
-```bash
-./init.sh                                  # harness check + full test suite (mvn test)
-```
-
-A green run means every module compiles, all tests pass, and the feature list is coherent.
-
-### 2. Run the gateway on plain JVM
+### 1. Run the gateway on plain JVM
 
 ```bash
 mvn -q -pl gateway-demo -am package -DskipTests
@@ -65,7 +57,7 @@ curl -si -X POST localhost:8080/v1/completions \
 Under the limit you get **HTTP 200** plus `X-RateLimit-Limit / Remaining / Reset` headers and a
 completion body. Once your quota is exhausted you get **HTTP 429** plus `Retry-After`.
 
-### 3. Run with Redis via Docker Compose
+### 2. Run with Redis via Docker Compose
 
 ```bash
 docker compose up --build      # redis + gateway on :8080
@@ -201,8 +193,7 @@ The suite is organised around a **shared contract**: both stores must satisfy th
 | Redis integration           | Testcontainers Redis with the atomic Lua script             |
 | Gateway wiring              | Javalin routes, mapper, shutdown, metrics                    |
 
-Run everything with `./init.sh` (which invokes `mvn test`). A green run is the gate before any
-feature is marked `done`.
+Verify with `mvn test`: every module must compile and all tests must pass before shipping.
 
 ---
 
