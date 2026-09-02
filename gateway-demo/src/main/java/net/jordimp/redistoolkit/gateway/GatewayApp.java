@@ -8,7 +8,9 @@ import io.prometheus.client.Counter;
 import io.prometheus.client.exporter.common.TextFormat;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -46,6 +48,7 @@ public final class GatewayApp {
     private Javalin app;
     private int actualPort;
     private boolean stopped;
+    private String clientIdHeader;
 
     public GatewayApp(RateLimiterService service,
                       KeyExtractor extractor,
@@ -88,6 +91,7 @@ public final class GatewayApp {
         int bound = (port == 0) ? firstFreePort() : port;
         this.actualPort = bound;
         this.app = Javalin.create();
+        this.clientIdHeader = System.getenv("RATELIMIT_CLIENT_ID");
         this.app.post(ROUTE, this::handleCompletions);
         if (metricsRegistry != null) {
             this.app.get(METRICS_ROUTE, this::handleMetrics);
@@ -118,6 +122,10 @@ public final class GatewayApp {
     }
 
     private void handleMetrics(Context ctx) {
+        if (!isPublicMetrics() && !isLoopback(ctx.req().getRemoteAddr())) {
+            writeJson(ctx, 403, Map.of(), new ErrorBody("forbidden", "Metrics endpoint restricted to localhost"));
+            return;
+        }
         try {
             StringWriter writer = new StringWriter();
             TextFormat.write004(writer, metricsRegistry.metricFamilySamples());
@@ -125,6 +133,18 @@ public final class GatewayApp {
             ctx.result(writer.toString());
         } catch (IOException e) {
             throw new IllegalStateException("Failed to render Prometheus metrics", e);
+        }
+    }
+
+    private static boolean isPublicMetrics() {
+        return "true".equalsIgnoreCase(System.getenv("RATELIMIT_METRICS_PUBLIC"));
+    }
+
+    private static boolean isLoopback(String remoteAddr) {
+        try {
+            return InetAddress.getByName(remoteAddr).isLoopbackAddress();
+        } catch (UnknownHostException e) {
+            return false;
         }
     }
 
@@ -140,7 +160,7 @@ public final class GatewayApp {
         Decision decision;
         Object successBody = null;
         try {
-            QuotaKey key = extractor.extract(Dimension.IP, remoteAddr(ctx));
+            QuotaKey key = extractor.extract(Dimension.IP, resolveClientId(ctx));
             Optional<RateLimitSpec> specOpt = registry.find(ROUTE);
             if (specOpt.isEmpty()) {
                 decision = Decision.rejected(Reason.CONFIG_ERROR, 0L, Duration.ZERO);
@@ -169,6 +189,14 @@ public final class GatewayApp {
             return new CompletionRequest(DEFAULT_MODEL, "");
         }
         return json.readValue(raw, CompletionRequest.class);
+    }
+
+    private String resolveClientId(Context ctx) {
+        String header = clientIdHeader != null ? ctx.header(clientIdHeader) : null;
+        if (header != null && !header.isBlank()) {
+            return header.trim();
+        }
+        return remoteAddr(ctx);
     }
 
     private static String remoteAddr(Context ctx) {

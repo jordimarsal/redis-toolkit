@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -15,6 +16,7 @@ import java.util.Objects;
 public final class LlamaServerBackend implements InferenceBackend {
 
     private static final String PATH = "/v1/completions";
+    private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(30);
 
     private final URI baseUrl;
     private final HttpClient client;
@@ -32,6 +34,7 @@ public final class LlamaServerBackend implements InferenceBackend {
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(baseUrl.resolve(PATH))
                     .header("Content-Type", "application/json")
+                    .timeout(RESPONSE_TIMEOUT)
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody(request)))
                     .build();
             HttpResponse<String> response = client.send(httpRequest, HttpResponse.BodyHandlers.ofString());

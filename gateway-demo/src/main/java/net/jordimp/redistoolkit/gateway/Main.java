@@ -21,12 +21,17 @@ import net.jordimp.redistoolkit.ratelimit.port.Clock;
 import net.jordimp.redistoolkit.ratelimit.port.QuotaStore;
 import net.jordimp.redistoolkit.ratelimit.usecase.RateLimiterService;
 import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
 
 public final class Main {
 
     private static final String ROUTE = "/v1/completions";
     private static final int DEFAULT_REDIS_PORT = 6379;
+    private static final int DEFAULT_PORT = 8080;
     private static final int DEFAULT_LIMIT_PER_MINUTE = 60;
+
+    private static final int REDIS_SOCKET_TIMEOUT_MS = 10_000;
+    private static final int REDIS_CONNECT_TIMEOUT_MS = 10_000;
 
     record StoreWiring(QuotaStore store, AutoCloseable resource) {
     }
@@ -52,12 +57,17 @@ public final class Main {
         if (redisHost == null || redisHost.isBlank()) {
             return new StoreWiring(new InMemoryQuotaStore(), null);
         }
-        JedisPool pool = new JedisPool(redisHost, redisPort);
+        JedisPoolConfig poolConfig = new JedisPoolConfig();
+        poolConfig.setMaxTotal(8);
+        poolConfig.setMaxIdle(4);
+        JedisPool pool = new JedisPool(poolConfig, redisHost, redisPort);
         RedisQuotaStore primary = new RedisQuotaStore(pool);
         ResilientQuotaStore resilient = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, metrics);
         return new StoreWiring(resilient, resilient);
     }
 
+    // Only BACKEND=llama activates the real llama-server client; any other value (or blank) falls back to the
+    // in-repo StubBackend so the gateway always runs offline. Wire another backend explicitly here if needed.
     static InferenceBackend createBackend(String type, String baseUrl) {
         if ("llama".equalsIgnoreCase(type)) {
             if (baseUrl == null || baseUrl.isBlank()) {
@@ -69,29 +79,61 @@ public final class Main {
     }
 
     private static int parseRedisPort() {
-        String env = System.getenv("REDIS_PORT");
-        if (env != null && !env.isBlank()) {
-            return Integer.parseInt(env.trim());
+        String raw = System.getenv("REDIS_PORT");
+        if (raw != null && !raw.isBlank()) {
+            try {
+                int port = Integer.parseInt(raw.trim());
+                if (port < 1 || port > 65_535) {
+                    throw new IllegalArgumentException("REDIS_PORT out of range 1..65535, got " + port);
+                }
+                return port;
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("REDIS_PORT must be an integer in 1..65535, got \"" + raw + "\"", e);
+            }
         }
         return DEFAULT_REDIS_PORT;
     }
 
     private static int parseLimitPerMinute() {
-        String env = System.getenv("LIMIT_PER_MINUTE");
-        if (env != null && !env.isBlank()) {
-            return Integer.parseInt(env.trim());
+        String raw = System.getenv("LIMIT_PER_MINUTE");
+        if (raw != null && !raw.isBlank()) {
+            try {
+                int n = Integer.parseInt(raw.trim());
+                if (n < 1) {
+                    throw new IllegalArgumentException("LIMIT_PER_MINUTE must be >= 1, got " + n);
+                }
+                return n;
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("LIMIT_PER_MINUTE must be a positive integer, got \"" + raw + "\"", e);
+            }
         }
         return DEFAULT_LIMIT_PER_MINUTE;
     }
 
     private static int parsePort(String[] args) {
         if (args.length > 0 && !args[0].isBlank()) {
-            return Integer.parseInt(args[0]);
+            try {
+                int port = Integer.parseInt(args[0].trim());
+                if (port < 1 || port > 65_535) {
+                    throw new IllegalArgumentException("port out of range 1..65535, got " + port);
+                }
+                return port;
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("port must be an integer in 1..65535, got \"" + args[0] + "\"", e);
+            }
         }
         String env = System.getenv("GATEWAY_PORT");
         if (env != null && !env.isBlank()) {
-            return Integer.parseInt(env.trim());
+            try {
+                int port = Integer.parseInt(env.trim());
+                if (port < 1 || port > 65_535) {
+                    throw new IllegalArgumentException("GATEWAY_PORT out of range 1..65535, got " + port);
+                }
+                return port;
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("GATEWAY_PORT must be an integer in 1..65535, got \"" + env + "\"", e);
+            }
         }
-        return 8080;
+        return DEFAULT_PORT;
     }
 }
