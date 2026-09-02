@@ -20,6 +20,7 @@ public class RedisQuotaStore implements QuotaStore, AutoCloseable {
             local capacity = tonumber(ARGV[1])
             local rate     = tonumber(ARGV[2])
             local now_ms   = tonumber(ARGV[3])
+            local ttl_ms   = tonumber(ARGV[4])
 
             local data   = redis.call('HMGET', key, 'tokens', 'last')
             local tokens = tonumber(data[1])
@@ -50,6 +51,7 @@ public class RedisQuotaStore implements QuotaStore, AutoCloseable {
             end
 
             redis.call('HSET', key, 'tokens', tostring(tokens), 'last', tostring(now_ms))
+            redis.call('PEXPIRE', key, ttl_ms)
             return {allowed, remaining, retry}
             """;
 
@@ -71,7 +73,8 @@ public class RedisQuotaStore implements QuotaStore, AutoCloseable {
         List<String> args = List.of(
                 Integer.toString(spec.burst()),
                 Double.toString(spec.tokensPerSecond()),
-                Long.toString(now.toEpochMilli()));
+                Long.toString(now.toEpochMilli()),
+                Long.toString(ttlMillisFor(spec)));
 
         Object raw;
         try (Jedis jedis = pool.getResource()) {
@@ -90,6 +93,10 @@ public class RedisQuotaStore implements QuotaStore, AutoCloseable {
             return Decision.ok(remaining, spec.limit());
         }
         return Decision.rejected(Reason.LIMIT_EXCEEDED, spec.limit(), Duration.ofSeconds(retrySecs));
+    }
+
+    private long ttlMillisFor(RateLimitSpec spec) {
+        return spec.refillWindow().toMillis() + 60_000L;
     }
 
     @Override

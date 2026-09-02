@@ -9,11 +9,19 @@ import net.jordimp.redistoolkit.ratelimit.port.QuotaStore;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class InMemoryQuotaStore implements QuotaStore {
 
-    private final ConcurrentHashMap<String, TokenBucketState> buckets = new ConcurrentHashMap<>();
+    private static final int MAX_BUCKETS = 10_000;
+
+    private final Map<String, TokenBucketState> buckets = new LinkedHashMap<String, TokenBucketState>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, TokenBucketState> eldest) {
+            return size() > MAX_BUCKETS;
+        }
+    };
 
     @Override
     public Decision evaluateAndConsume(QuotaKey key, RateLimitSpec spec, Instant now) {
@@ -22,19 +30,21 @@ public class InMemoryQuotaStore implements QuotaStore {
         String rendered = key.render();
 
         Decision[] result = new Decision[1];
-        buckets.compute(rendered, (k, current) -> {
+        synchronized (buckets) {
+            TokenBucketState current = buckets.get(rendered);
             TokenBucketState state = (current == null)
                     ? new TokenBucketState(capacity, now)
                     : current.refilled(now, rate, capacity);
             if (state.canConsume(1)) {
                 TokenBucketState consumed = state.consume(1);
+                buckets.put(rendered, consumed);
                 result[0] = Decision.ok((long) Math.floor(consumed.tokens()), spec.limit());
-                return consumed;
+            } else {
+                buckets.put(rendered, state);
+                long waitSeconds = secondsUntilNextToken(state.tokens(), rate);
+                result[0] = Decision.rejected(Reason.LIMIT_EXCEEDED, spec.limit(), Duration.ofSeconds(waitSeconds));
             }
-            long waitSeconds = secondsUntilNextToken(state.tokens(), rate);
-            result[0] = Decision.rejected(Reason.LIMIT_EXCEEDED, spec.limit(), Duration.ofSeconds(waitSeconds));
-            return state;
-        });
+        }
         return result[0];
     }
 
