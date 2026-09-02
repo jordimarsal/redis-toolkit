@@ -2,11 +2,20 @@ package net.jordimp.redistoolkit.gateway;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.prometheus.client.CollectorRegistry;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 import net.jordimp.redistoolkit.gateway.backend.InferenceBackend;
 import net.jordimp.redistoolkit.gateway.backend.LlamaServerBackend;
 import net.jordimp.redistoolkit.gateway.backend.StubBackend;
@@ -55,7 +64,7 @@ public final class Main {
         DecisionMapper mapper = new DecisionMapper();
         ObjectMapper json = new ObjectMapper();
 
-        InferenceBackend backend = createBackend(System.getenv("BACKEND"), System.getenv("LLM_BASE_URL"));
+        InferenceBackend backend = createBackend(System.getenv("BACKEND"), System.getenv("LLM_BASE_URL"), System.getenv("LLM_TRUSTSTORE"));
         GatewayApp app = new GatewayApp(service, extractor, registry, mapper, backend, json, metrics, wiring.resource());
         Runtime.getRuntime().addShutdownHook(new Thread(app::stop));
         app.start(parsePort(args));
@@ -86,6 +95,11 @@ public final class Main {
     // Only BACKEND=llama activates the real llama-server client; any other value (or blank) falls back to the
     // in-repo StubBackend so the gateway always runs offline. Wire another backend explicitly here if needed.
     static InferenceBackend createBackend(String type, String baseUrl) {
+        return createBackend(type, baseUrl, null);
+    }
+
+    /** When {@code trustStorePath} points at a PKCS12/JKS keystore it becomes the TLS trust anchor for the llama call. */
+    static InferenceBackend createBackend(String type, String baseUrl, String trustStorePath) {
         if ("llama".equalsIgnoreCase(type)) {
             if (baseUrl == null || baseUrl.isBlank()) {
                 throw new IllegalArgumentException("BACKEND=llama requires LLM_BASE_URL");
@@ -96,9 +110,43 @@ public final class Main {
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("LLM_BASE_URL is not a valid URI: " + baseUrl, e);
             }
-            return new LlamaServerBackend(uri, HttpClient.newHttpClient(), new ObjectMapper());
+            return new LlamaServerBackend(uri, buildHttpClient(trustStorePath), new ObjectMapper());
         }
         return new StubBackend();
+    }
+
+    private static HttpClient buildHttpClient(String trustStorePath) {
+        if (trustStorePath == null || trustStorePath.isBlank()) {
+            return HttpClient.newHttpClient();
+        }
+        Path path = Path.of(trustStorePath.trim());
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("LLM_TRUSTSTORE file not found: " + trustStorePath);
+        }
+        try (InputStream in = Files.newInputStream(path)) {
+            KeyStore keyStore = loadKeyStore(in, trustStorePath);
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(keyStore);
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, tmf.getTrustManagers(), null);
+            return HttpClient.newBuilder().sslContext(sslContext).build();
+        } catch (GeneralSecurityException | IOException e) {
+            throw new IllegalArgumentException("LLM_TRUSTSTORE is not a readable PKCS12/JKS keystore: " + trustStorePath, e);
+        }
+    }
+
+    private static KeyStore loadKeyStore(InputStream in, String source) throws GeneralSecurityException, IOException {
+        byte[] bytes = in.readAllBytes();
+        for (String type : new String[]{"PKCS12", "JKS"}) {
+            try {
+                KeyStore keyStore = KeyStore.getInstance(type);
+                keyStore.load(new ByteArrayInputStream(bytes), null);
+                return keyStore;
+            } catch (IOException notThisFormat) {
+                // try the next supported format
+            }
+        }
+        throw new IOException("no supported keystore format (tried PKCS12 and JKS): " + source);
     }
 
     private static int parseRedisPort() {

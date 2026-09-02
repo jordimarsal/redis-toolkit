@@ -17,6 +17,9 @@ services:
       GATEWAY_PORT: "8080"
       BACKEND: ${BACKEND:-stub}
       LLM_BASE_URL: https://llama-tls:8443/v1
+      # Optional path (inside the container) to a PKCS12/JKS keystore with the CA that signed
+      # the llama-server certificate; leave empty for Java's default trust store.
+      LLM_TRUSTSTORE: ${LLM_TRUSTSTORE:-}
     depends_on:
       redis:
         condition: service_healthy

@@ -1,6 +1,7 @@
 package net.jordimp.redistoolkit.jobqueue.support;
 
 import net.jordimp.redistoolkit.jobqueue.domain.ClaimedJob;
+import net.jordimp.redistoolkit.jobqueue.domain.DedupKey;
 import net.jordimp.redistoolkit.jobqueue.domain.JobId;
 import net.jordimp.redistoolkit.jobqueue.domain.Payload;
 import net.jordimp.redistoolkit.jobqueue.domain.Priority;
@@ -21,10 +22,10 @@ public final class FakeQueueStore implements QueueStore {
 
     private static final class Enqueued {
         final Payload payload;
-        final String dedupKey;
+        final DedupKey dedupKey;
         final Priority priority;
 
-        Enqueued(Payload payload, String dedupKey, Priority priority) {
+        Enqueued(Payload payload, DedupKey dedupKey, Priority priority) {
             this.payload = payload;
             this.dedupKey = dedupKey;
             this.priority = priority;
@@ -42,14 +43,14 @@ public final class FakeQueueStore implements QueueStore {
     }
 
     @Override
-    public SubmitResult submit(Payload payload, Priority priority, String dedupKey) {
+    public SubmitResult submit(Payload payload, Priority priority, DedupKey dedupKey) {
         JobId id = JobId.generate();
         inbox.get(priority).add(new Enqueued(payload, dedupKey, priority));
         return new SubmitResult("fake", id);
     }
 
     @Override
-    public SubmitResult submitDelayed(Payload payload, Priority priority, String dedupKey, Instant runAt) {
+    public SubmitResult submitDelayed(Payload payload, Priority priority, DedupKey dedupKey, Instant runAt) {
         JobId id = JobId.generate();
         delayed.put(runAt.toEpochMilli(), new Enqueued(payload, dedupKey, priority));
         return new SubmitResult("fake", id);
@@ -68,7 +69,7 @@ public final class FakeQueueStore implements QueueStore {
                 }
             }
             if (next != null) {
-                ClaimedJob claimed = new ClaimedJob(JobId.generate(), next.payload, next.dedupKey, 1);
+                ClaimedJob claimed = new ClaimedJob(JobId.generate(), next.payload, next.dedupKey == null ? null : next.dedupKey.raw(), 1);
                 pendingByGroup.computeIfAbsent(groupId, k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(claimed);
                 return Optional.of(claimed);
             }

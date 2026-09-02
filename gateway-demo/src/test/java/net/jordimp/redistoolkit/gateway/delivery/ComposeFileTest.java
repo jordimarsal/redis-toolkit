@@ -39,7 +39,8 @@ class ComposeFileTest {
         assertThat(asMap(gateway.get("depends_on"))).containsKey("redis");
 
         Map<String, Object> env = asMap(gateway.get("environment"));
-        assertThat(env).containsKeys("REDIS_HOST", "BACKEND", "LLM_BASE_URL");
+        // LLM_TRUSTSTORE must be plumbable so operators can point the gateway at their CA bundle (M5).
+        assertThat(env).containsKeys("REDIS_HOST", "BACKEND", "LLM_BASE_URL", "LLM_TRUSTSTORE");
         assertThat(String.valueOf(env.get("REDIS_HOST"))).isEqualTo("redis");
         // The gateway enforces https:// for LLM_BASE_URL; compose must not ship a plaintext URL.
         assertThat(String.valueOf(env.get("LLM_BASE_URL"))).startsWith("https://");

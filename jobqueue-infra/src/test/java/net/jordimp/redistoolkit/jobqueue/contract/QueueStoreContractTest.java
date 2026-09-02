@@ -1,6 +1,7 @@
 package net.jordimp.redistoolkit.jobqueue.contract;
 
 import net.jordimp.redistoolkit.jobqueue.domain.ClaimedJob;
+import net.jordimp.redistoolkit.jobqueue.domain.DedupKey;
 import net.jordimp.redistoolkit.jobqueue.domain.Payload;
 import net.jordimp.redistoolkit.jobqueue.domain.Priority;
 import net.jordimp.redistoolkit.jobqueue.port.QueueStore;
@@ -24,7 +25,7 @@ public abstract class QueueStoreContractTest {
 
     protected abstract QueueStore store();
 
-    private Payload payload(String text) {
+    protected Payload payload(String text) {
         return Payload.of(text.getBytes());
     }
 
@@ -89,7 +90,7 @@ public abstract class QueueStoreContractTest {
     @Test
     void dedupKeyCollapsesRepeatedDelivery() {
         QueueStore s = store();
-        s.submit(payload("d"), Priority.NORMAL, "dedup-1");
+        s.submit(payload("d"), Priority.NORMAL, DedupKey.of("dedup-1"));
         Optional<ClaimedJob> first = s.claim("g", 1);
         assertThat(first).isPresent();
         Optional<ClaimedJob> second = s.claim("g", 1);

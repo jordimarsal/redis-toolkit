@@ -2,6 +2,8 @@ package net.jordimp.redistoolkit.gateway.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -31,6 +33,16 @@ class LlamaServerBackendTest {
         LlamaServerBackend backend = new LlamaServerBackend(URI.create("https://llama.local/v1"), HttpClient.newHttpClient(), json);
         Completion completion = backend.parseResponse("{\"completion\":\"fallback text\"}");
         assertThat(completion.text()).isEqualTo("fallback text");
+    }
+
+    @Test
+    void parseResponse_truncatesHugeInvalidBodyInErrorMessage() {
+        LlamaServerBackend backend = new LlamaServerBackend(URI.create("https://llama.local/v1"), HttpClient.newHttpClient(), json);
+        String huge = "{" + "x".repeat(10_000);
+        assertThatThrownBy(() -> backend.parseResponse(huge))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("truncated")
+                .satisfies(ex -> assertThat(ex.getMessage()).hasSizeLessThan(600));
     }
 
     @Test

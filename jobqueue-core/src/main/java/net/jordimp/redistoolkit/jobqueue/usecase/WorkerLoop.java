@@ -6,6 +6,7 @@ import net.jordimp.redistoolkit.jobqueue.port.Metrics;
 
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public final class WorkerLoop {
@@ -17,6 +18,8 @@ public final class WorkerLoop {
     private final QueueStore store;
     private final Metrics metrics;
     private final AtomicBoolean running = new AtomicBoolean(true);
+    private final AtomicInteger consecutiveFailures = new AtomicInteger();
+    private volatile boolean stoppedByFailures;
 
     private volatile Consumer<ClaimedJob> processor;
     private Thread thread;
@@ -43,13 +46,23 @@ public final class WorkerLoop {
                 processor.accept(job);
                 metrics.delivered(groupId);
                 store.acknowledge(groupId, job);
+                consecutiveFailures.set(0);
                 processed++;
             } catch (RuntimeException e) {
                 metrics.failed(groupId);
+                if (consecutiveFailures.incrementAndGet() >= MAX_CONSECUTIVE_FAILURES && !stoppedByFailures) {
+                    stoppedByFailures = true;
+                    System.err.println("[worker-" + groupId + "] stopping after " + MAX_CONSECUTIVE_FAILURES
+                            + " consecutive failures; unacknowledged jobs stay pending for redelivery");
+                }
                 throw e;
             }
         }
         return processed;
+    }
+
+    public boolean isStoppedByFailures() {
+        return stoppedByFailures;
     }
 
     public void requestShutdown() {
@@ -67,19 +80,16 @@ public final class WorkerLoop {
     }
 
     private void runLoop() {
-        int consecutiveFailures = 0;
         while (running.get()) {
             int processed;
             try {
                 processed = pollAndProcess(DEFAULT_BATCH);
             } catch (RuntimeException e) {
-                consecutiveFailures++;
-                if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                if (stoppedByFailures) {
                     break;
                 }
                 continue;
             }
-            consecutiveFailures = 0;
             if (processed == 0 && !running.get()) {
                 break;
             }
@@ -99,8 +109,8 @@ public final class WorkerLoop {
         }
     }
 
-    private void drain() {
-        if (processor == null) {
+    void drain() {
+        if (processor == null || stoppedByFailures) {
             return;
         }
         pollAndProcess(DEFAULT_BATCH);

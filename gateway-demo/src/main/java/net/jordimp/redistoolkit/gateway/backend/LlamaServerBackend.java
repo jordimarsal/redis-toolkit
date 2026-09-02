@@ -17,6 +17,7 @@ public final class LlamaServerBackend implements InferenceBackend {
 
     private static final String PATH = "/v1/completions";
     private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(30);
+    private static final int MAX_ERROR_BODY_CHARS = 200;
 
     private final URI baseUrl;
     private final HttpClient client;
@@ -89,7 +90,14 @@ public final class LlamaServerBackend implements InferenceBackend {
             String text = root.path("completion").asText(root.path("content").asText(""));
             return new Completion(id, text);
         } catch (IOException e) {
-            throw new IllegalArgumentException("Invalid llama-server response: " + body, e);
+            throw new IllegalArgumentException("Invalid llama-server response: " + abbreviate(body), e);
         }
+    }
+
+    private static String abbreviate(String value) {
+        if (value == null || value.length() <= MAX_ERROR_BODY_CHARS) {
+            return String.valueOf(value);
+        }
+        return value.substring(0, MAX_ERROR_BODY_CHARS) + "...(truncated, total " + value.length() + " chars)";
     }
 }

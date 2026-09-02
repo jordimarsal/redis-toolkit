@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -127,6 +129,31 @@ class GatewayAppTest {
     }
 
     @Test
+    void chunkedOversizedBody_returns413_payloadTooLarge() throws Exception {
+        // No Content-Length header: Transfer-Encoding: chunked must not bypass the raw body cap.
+        String padded = "{\"model\":\"stub\",\"prompt\":\"hi\"" + " ".repeat(9 * 1024) + "}";
+        HttpResponse<String> resp = postStream(padded);
+        assertThat(resp.statusCode()).isEqualTo(413);
+        assertThat(resp.body()).contains("payload_too_large");
+    }
+
+    @Test
+    void chunkedValidBody_returns200_completion() throws Exception {
+        HttpResponse<String> resp = postStream("{\"model\":\"stub\",\"prompt\":\"chunked\"}");
+        assertThat(resp.statusCode()).isEqualTo(200);
+        assertThat(resp.body()).contains("Stub completion for").contains("chunked");
+    }
+
+    @Test
+    void responses_includeNosniffSecurityHeader() throws Exception {
+        HttpResponse<String> ok = post("{\"model\":\"stub\",\"prompt\":\"hi\"}");
+        assertThat(ok.headers().firstValue("X-Content-Type-Options")).contains("nosniff");
+        HttpResponse<String> bad = post("{this is not valid json");
+        assertThat(bad.statusCode()).isEqualTo(400);
+        assertThat(bad.headers().firstValue("X-Content-Type-Options")).contains("nosniff");
+    }
+
+    @Test
     void oversizedClientIdentifier_returns400_invalidClientId() throws Exception {
         javalin.stop();
         GatewayApp app = buildGateway();
@@ -173,5 +200,15 @@ class GatewayAppTest {
             builder.header("X-Client", clientId);
         }
         return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> postStream(String body) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + ROUTE))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofInputStream(
+                        () -> new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8))))
+                .build();
+        return http.send(request, HttpResponse.BodyHandlers.ofString());
     }
 }

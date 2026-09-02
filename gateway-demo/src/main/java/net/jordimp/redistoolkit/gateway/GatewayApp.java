@@ -6,11 +6,14 @@ import io.javalin.http.Context;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.Counter;
 import io.prometheus.client.exporter.common.TextFormat;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -144,6 +147,7 @@ public final class GatewayApp {
         try {
             StringWriter writer = new StringWriter();
             TextFormat.write004(writer, metricsRegistry.metricFamilySamples());
+            ctx.header("X-Content-Type-Options", "nosniff");
             ctx.contentType("text/plain; charset=utf-8");
             ctx.result(writer.toString());
         } catch (IOException e) {
@@ -164,14 +168,21 @@ public final class GatewayApp {
     }
 
     private void handleCompletions(Context ctx) {
-        if (exceedsBodyLimit(ctx)) {
+        String rawBody;
+        try {
+            rawBody = readBoundedBody(ctx);
+        } catch (IOException e) {
+            writeJson(ctx, 400, Map.of(), new ErrorBody("bad_request", "Invalid JSON body"));
+            return;
+        }
+        if (rawBody == null) {
             writeJson(ctx, 413, Map.of(), new ErrorBody("payload_too_large", "Request body exceeds maximum allowed size"));
             return;
         }
 
         CompletionRequest request;
         try {
-            request = parseRequest(ctx.body());
+            request = parseRequest(rawBody);
         } catch (Exception e) {
             writeJson(ctx, 400, Map.of(), new ErrorBody("bad_request", "Invalid JSON body"));
             return;
@@ -221,16 +232,21 @@ public final class GatewayApp {
         return json.readValue(raw, CompletionRequest.class);
     }
 
-    private static boolean exceedsBodyLimit(Context ctx) {
-        String contentLength = ctx.header("Content-Length");
-        if (contentLength == null || contentLength.isBlank()) {
-            return false; // chunked bodies are still bounded by the per-field limits below
+    /** Reads at most {@link #MAX_BODY_BYTES} from the request stream; returns {@code null} when the cap is exceeded. */
+    private static String readBoundedBody(Context ctx) throws IOException {
+        InputStream in = ctx.req().getInputStream();
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream(MAX_BODY_BYTES);
+        byte[] chunk = new byte[4096];
+        int total = 0;
+        int n;
+        while ((n = in.read(chunk)) != -1) {
+            total += n;
+            if (total > MAX_BODY_BYTES) {
+                return null;
+            }
+            buffer.write(chunk, 0, n);
         }
-        try {
-            return Long.parseLong(contentLength.trim()) > MAX_BODY_BYTES;
-        } catch (NumberFormatException e) {
-            return true; // fail closed on malformed headers
-        }
+        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
     }
 
     private static boolean isWithinFieldLimits(CompletionRequest request) {
@@ -256,6 +272,7 @@ public final class GatewayApp {
         if (headers != null) {
             headers.forEach(ctx::header);
         }
+        ctx.header("X-Content-Type-Options", "nosniff");
         ctx.contentType("application/json");
         try {
             String out = (body == null) ? "" : json.writeValueAsString(body);

@@ -1,6 +1,7 @@
 package net.jordimp.redistoolkit.jobqueue.infra.memory;
 
 import net.jordimp.redistoolkit.jobqueue.domain.ClaimedJob;
+import net.jordimp.redistoolkit.jobqueue.domain.DedupKey;
 import net.jordimp.redistoolkit.jobqueue.domain.JobId;
 import net.jordimp.redistoolkit.jobqueue.domain.Payload;
 import net.jordimp.redistoolkit.jobqueue.domain.Priority;
@@ -47,17 +48,21 @@ public final class InMemoryQueueStore implements QueueStore {
     }
 
     @Override
-    public synchronized SubmitResult submit(Payload payload, Priority priority, String dedupKey) {
-        Stored stored = new Stored(JobId.generate(), payload, dedupKey, priority);
+    public synchronized SubmitResult submit(Payload payload, Priority priority, DedupKey dedupKey) {
+        Stored stored = new Stored(JobId.generate(), payload, rawOf(dedupKey), priority);
         allJobs.get(priority).add(stored);
         return new SubmitResult(queueName, stored.jobId());
     }
 
     @Override
-    public synchronized SubmitResult submitDelayed(Payload payload, Priority priority, String dedupKey, Instant runAt) {
-        Stored stored = new Stored(JobId.generate(), payload, dedupKey, priority);
+    public synchronized SubmitResult submitDelayed(Payload payload, Priority priority, DedupKey dedupKey, Instant runAt) {
+        Stored stored = new Stored(JobId.generate(), payload, rawOf(dedupKey), priority);
         delayed.put(runAt.toEpochMilli(), stored);
         return new SubmitResult(queueName, stored.jobId());
+    }
+
+    private static String rawOf(DedupKey key) {
+        return key == null ? null : key.raw();
     }
 
     @Override

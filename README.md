@@ -82,6 +82,7 @@ BACKEND=llama docker compose --profile llama up --build
 | `LIMIT_PER_MINUTE` | `60`     | Token-bucket capacity per client key                         |
 | `BACKEND`        | `stub`     | Inference backend: `stub` or `llama`                          |
 | `LLM_BASE_URL`   | —          | Required when `BACKEND=llama`. Must be an absolute `https://` URL with a host (plaintext is rejected) |
+| `LLM_TRUSTSTORE` | unset      | Path to a PKCS12/JKS keystore holding the CA that signed the llama-server certificate; unset → Java's default trust store. Set but missing/unreadable → fail-fast at startup |
 | `RATELIMIT_CLIENT_ID` | unset    | Header name whose value becomes the quota identity instead of the source IP. **Only set this if the header is injected by a trusted authentication layer** — otherwise clients can rotate it to bypass limits |
 | `RATELIMIT_KEY_PREFIX` | `gateway-demo` | Redis key prefix for bucket state. Keep identical across replicas so they share one global budget |
 
@@ -89,7 +90,9 @@ BACKEND=llama docker compose --profile llama up --build
 
 - **`POST /v1/completions`** — the guarded route. The request body is size-capped (raw body ≤ 8 KiB,
   prompt ≤ 4096 chars), quota-checked, and then forwarded to the inference backend. Oversized requests
-  are rejected with `413 payload_too_large` before any quota is consumed.
+  are rejected with `413 payload_too_large` before any quota is consumed. An empty body is accepted as a
+  demo convenience (it maps to a default stub request so you can smoke-test without crafting JSON); treat
+  that as a courtesy, not a contract — real clients should always send a JSON body.
 - **`GET /metrics`** — Prometheus text exposition (`ratelimit_decisions_total`,
   `ratelimit_store_failures_total`, `ratelimit_degraded`, …).
 
@@ -140,6 +143,18 @@ The budget refills automatically as the token bucket refills over time, or resta
 the gateway. The same behaviour is automated end-to-end in [`scripts/smoke-compose.sh`](scripts/smoke-compose.sh),
 which asserts a `200` followed by a `429` with a valid `Retry-After`.
 
+### Security notes
+
+This project is a study, not a hardened product. Before exposing it beyond a trusted network:
+
+- **No authentication.** Quotas key by client IP (or by header only if your auth layer injects it).
+  Anyone who can reach the port can spend quotas; put real identity and TLS termination in front of it.
+- **IP keys behind NAT/CGNAT are shared.** Many users behind one egress IP share a single budget and
+  can exhaust each other's allowance. For per-user limits set `RATELIMIT_CLIENT_ID` to a header that
+  only your trusted authentication layer sets.
+- **Backend trust is explicit.** The llama backend requires an `https://` URL; pin the signing CA with
+  `LLM_TRUSTSTORE` instead of relying on the platform trust store.
+
 ---
 
 ## Architecture
@@ -153,6 +168,8 @@ depends on the JDK alone, so infrastructure can never leak into the domain.
 | `ratelimit-infra`| `RedisQuotaStore` (Jedis + atomic Lua token bucket), `InMemoryQuotaStore`, resilience wrapper | core          |
 | `ratelimit-api`  | HTTP-facing DTOs, `KeyExtractor`, `RateLimitRegistry`, decision→response mapper | core (+infra) |
 | `gateway-demo`   | Javalin entrypoint, inference backends (`StubBackend`, `LlamaServerBackend`) | api (+infra)  |
+| `jobqueue-core`  | Job-queue domain (`JobId`, `Payload`, `Priority`), ports (`QueueStore`), use cases (`WorkerLoop`) | JDK only       |
+| `jobqueue-infra` | `RedisQueueStore` (streams + consumer groups) and `InMemoryQueueStore` behind one shared contract    | core          |
 
 **Request flow.** `KeyExtractor` builds the client key → the registry resolves the
 `RateLimitSpec` → `evaluateAndConsume(key, spec, now)` runs atomically inside the store → the
@@ -184,7 +201,16 @@ Decision(allowed, remaining, limit, retryAfter, reason)
 Mapper → ApiResponse<T> + X-RateLimit-* / Retry-After
    ▼
 HTTP response — allowed: body from InferenceBackend; denied: 429
-```
+ ```
+
+### Job queue semantics
+
+The `jobqueue-*` modules implement a fan-out work queue over Redis streams: every submitted job is
+delivered **once per consumer group**. Within a group delivery is at-least-once — unacknowledged jobs
+are reclaimed and redelivered, acknowledged ones are never redelivered. Groups are independent, so N
+groups each receive every job across all their claims. An optional dedup key makes submission
+idempotent for a TTL window, and delayed jobs promote atomically into the priority stream at their
+run time.
 
 Time is always obtained through the injected `Clock`, so unit tests are fully deterministic. See
 [`docs/architecture.md`](docs/architecture.md) for the full quality standards and discarded
