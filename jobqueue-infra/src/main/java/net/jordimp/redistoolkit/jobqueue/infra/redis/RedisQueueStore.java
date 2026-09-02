@@ -257,7 +257,9 @@ public final class RedisQueueStore implements QueueStore {
             end
             local provisional = (#parts >= 4 and parts[4] ~= '') and parts[4] or ''
             if provisional ~= '' then
+              -- 7-day TTL bounds the map's memory use; mappings older than that are stale by definition.
               redis.call('HSET', 'jobqueue:' .. ARGV[2] .. ':delaymap', provisional, id)
+              redis.call('PEXPIRE', 'jobqueue:' .. ARGV[2] .. ':delaymap', 604800000)
             end
             return { id, provisional }
             """;

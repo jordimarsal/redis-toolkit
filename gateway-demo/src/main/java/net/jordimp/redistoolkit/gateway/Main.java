@@ -82,10 +82,18 @@ public final class Main {
         poolConfig.setMinEvictableIdleTimeMillis(REDIS_MIN_EVICTABLE_IDLE_MS);
         poolConfig.setTimeBetweenEvictionRunsMillis(REDIS_EVICTION_RUN_INTERVAL_MS);
         poolConfig.setMaxWait(Duration.ofMillis(REDIS_MAX_WAIT_MS));
-        DefaultJedisClientConfig clientConfig = DefaultJedisClientConfig.builder()
+        DefaultJedisClientConfig.Builder clientBuilder = DefaultJedisClientConfig.builder()
                 .connectionTimeoutMillis(REDIS_CONNECT_TIMEOUT_MS)
-                .socketTimeoutMillis(REDIS_SOCKET_TIMEOUT_MS)
-                .build();
+                .socketTimeoutMillis(REDIS_SOCKET_TIMEOUT_MS);
+        String redisUser = trimmedEnv("REDIS_USER");
+        if (redisUser != null) {
+            clientBuilder.user(redisUser);
+        }
+        String redisPassword = trimmedEnv("REDIS_PASSWORD");
+        if (redisPassword != null) {
+            clientBuilder.password(redisPassword);
+        }
+        DefaultJedisClientConfig clientConfig = clientBuilder.build();
         JedisPool pool = new JedisPool(poolConfig, new HostAndPort(redisHost, redisPort), clientConfig);
         RedisQuotaStore primary = new RedisQuotaStore(pool, resolveKeyPrefix());
         ResilientQuotaStore resilient = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, metrics);
@@ -163,6 +171,11 @@ public final class Main {
             }
         }
         return DEFAULT_REDIS_PORT;
+    }
+
+    private static String trimmedEnv(String name) {
+        String raw = System.getenv(name);
+        return (raw == null || raw.isBlank()) ? null : raw.trim();
     }
 
     /** Keep identical across replicas so they share one global budget; override only for isolated environments. */

@@ -140,7 +140,7 @@ public final class GatewayApp {
     }
 
     private void handleMetrics(Context ctx) {
-        if (!isPublicMetrics() && !isLoopback(ctx.req().getRemoteAddr())) {
+        if (!isPublicMetrics() && !isTrustedLocalRequest(ctx)) {
             writeJson(ctx, 403, Map.of(), new ErrorBody("forbidden", "Metrics endpoint restricted to localhost"));
             return;
         }
@@ -157,6 +157,17 @@ public final class GatewayApp {
 
     private static boolean isPublicMetrics() {
         return "true".equalsIgnoreCase(System.getenv("RATELIMIT_METRICS_PUBLIC"));
+    }
+
+    /**
+     * Loopback on the direct TCP peer — but never for requests forwarded by a proxy: behind one,
+     * every external client would appear as loopback and the check would be meaningless.
+     */
+    private static boolean isTrustedLocalRequest(Context ctx) {
+        if (ctx.header("X-Forwarded-For") != null || ctx.header("X-Real-Ip") != null) {
+            return false;
+        }
+        return isLoopback(ctx.req().getRemoteAddr());
     }
 
     private static boolean isLoopback(String remoteAddr) {

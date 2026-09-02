@@ -13,6 +13,9 @@ public final class WorkerLoop {
 
     private static final int DEFAULT_BATCH = 10;
     private static final int MAX_CONSECUTIVE_FAILURES = 100;
+    /** Idle backoff bounds: an empty queue must not hammer the store with claims at full speed. */
+    private static final long IDLE_BACKOFF_BASE_MS = 50L;
+    private static final long IDLE_BACKOFF_MAX_MS = 1_000L;
 
     private final String groupId;
     private final QueueStore store;
@@ -80,6 +83,7 @@ public final class WorkerLoop {
     }
 
     private void runLoop() {
+        long idleBackoffMs = IDLE_BACKOFF_BASE_MS;
         while (running.get()) {
             int processed;
             try {
@@ -90,11 +94,25 @@ public final class WorkerLoop {
                 }
                 continue;
             }
-            if (processed == 0 && !running.get()) {
+            if (processed > 0) {
+                idleBackoffMs = IDLE_BACKOFF_BASE_MS;
+            } else {
+                sleepQuietly(idleBackoffMs);
+                idleBackoffMs = Math.min(IDLE_BACKOFF_MAX_MS, idleBackoffMs * 2);
+            }
+            if (!running.get()) {
                 break;
             }
         }
         drain();
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public void drainAndWait() {

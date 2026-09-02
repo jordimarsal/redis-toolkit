@@ -5,14 +5,24 @@ TIMEOUT_S="${SMOKE_TIMEOUT_S:-60}"
 
 fail() { echo "SMOKE FAIL: $*" >&2; exit "${2:-1}"; }
 
+# Readiness probe uses a real completion request instead of /metrics: metrics is restricted to
+# loopback peers by design, and traffic through a published port does not always arrive as
+# loopback (depends on docker's forwarding path), so it cannot be probed from the host reliably.
+# Each poll consumes one rate-limit token, which is fine while the gateway boots (< limit per minute).
 deadline=$(( $(date +%s) + TIMEOUT_S ))
 while :; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" "$GATEWAY_URL/metrics" || true)
-  if [ "$code" = "200" ]; then break; fi
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 \
+    -X POST "$GATEWAY_URL/v1/completions" \
+    -H 'Content-Type: application/json' \
+    -d '{"model":"stub","prompt":"smoke-ready"}' || true)
+  case "$code" in
+    ''|000) : ;; # no HTTP response yet (connection refused/reset)
+    *) break ;;  # any status means the gateway is serving
+  esac
   if [ "$(date +%s)" -ge "$deadline" ]; then
     fail "gateway not ready after ${TIMEOUT_S}s at $GATEWAY_URL (check 'docker compose logs gateway')" 2
   fi
-  sleep 1
+  sleep 2
 done
 
 body_file=$(mktemp)

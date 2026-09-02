@@ -1,9 +1,12 @@
 package net.jordimp.redistoolkit.jobqueue.usecase;
 
 import net.jordimp.redistoolkit.jobqueue.domain.ClaimedJob;
+import net.jordimp.redistoolkit.jobqueue.domain.DedupKey;
 import net.jordimp.redistoolkit.jobqueue.domain.Payload;
 import net.jordimp.redistoolkit.jobqueue.domain.Priority;
+import net.jordimp.redistoolkit.jobqueue.port.PendingStats;
 import net.jordimp.redistoolkit.jobqueue.port.QueueStore;
+import net.jordimp.redistoolkit.jobqueue.port.SubmitResult;
 import net.jordimp.redistoolkit.jobqueue.support.FakeQueueStore;
 import net.jordimp.redistoolkit.jobqueue.support.RecordingMetrics;
 import org.junit.jupiter.api.Test;
@@ -11,10 +14,13 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class WorkerLoopTest {
 
@@ -99,5 +105,69 @@ class WorkerLoopTest {
         int processed = loop.pollAndProcess(10);
         assertThat(processed).as("no claim after shutdown").isZero();
         assertThat(loop.isRunning()).isFalse();
+    }
+
+    @Test
+    void idleRunLoopBacksOffInsteadOfHotSpinningClaims() throws InterruptedException {
+        AtomicInteger claims = new AtomicInteger();
+        QueueStore empty = countingEmptyStore(claims);
+        WorkerLoop loop = new WorkerLoop(GROUP, empty, metrics);
+        loop.setProcessor(job -> {
+        });
+        loop.start();
+        try {
+            Thread.sleep(450);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            fail("interrupted while observing the idle loop");
+        }
+        int observed = claims.get();
+        loop.drainAndWait();
+        // Without backoff this would be in the thousands over 450 ms; with exponential idle
+        // backoff (50 ms base, doubling) it stays in single digits.
+        assertThat(observed).as("claim calls while the queue is idle").isBetween(1, 20);
+    }
+
+    private static QueueStore countingEmptyStore(AtomicInteger claims) {
+        return new QueueStore() {
+            @Override
+            public SubmitResult submit(Payload payload, Priority priority, DedupKey dedupKey) {
+                throw new UnsupportedOperationException("not used by this test");
+            }
+
+            @Override
+            public SubmitResult submitDelayed(Payload payload, Priority priority, DedupKey dedupKey, Instant runAt) {
+                throw new UnsupportedOperationException("not used by this test");
+            }
+
+            @Override
+            public Optional<ClaimedJob> claim(String groupId, int maxPoll) {
+                claims.incrementAndGet();
+                return Optional.empty();
+            }
+
+            @Override
+            public void acknowledge(String groupId, ClaimedJob claimed) {
+            }
+
+            @Override
+            public int reclaimPending(int maxClaim) {
+                return 0;
+            }
+
+            @Override
+            public PendingStats pendingStats() {
+                return new PendingStats(0, 0);
+            }
+
+            @Override
+            public int promoteDelayed() {
+                return 0;
+            }
+
+            @Override
+            public void close() {
+            }
+        };
     }
 }

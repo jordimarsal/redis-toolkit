@@ -30,7 +30,8 @@ class ComposeFileTest {
                 .containsExactlyInAnyOrder("redis", "gateway", "llama-server", "llama-tls");
 
         Map<String, Object> redis = asMap(services.get("redis"));
-        assertThat(redis.get("image")).isEqualTo("redis:7");
+        // Supply-chain hardening: images must be pinned by digest, not just by tag.
+        assertThat(String.valueOf(redis.get("image"))).startsWith("redis:7@sha256:");
         assertThat(asMap(redis.get("healthcheck"))).isNotEmpty();
 
         Map<String, Object> gateway = asMap(services.get("gateway"));

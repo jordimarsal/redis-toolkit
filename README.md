@@ -79,6 +79,8 @@ BACKEND=llama docker compose --profile llama up --build
 | `GATEWAY_PORT`   | `8080`     | HTTP port (first CLI argument wins)                            |
 | `REDIS_HOST`     | unset      | Redis backend host; unset → in-memory store                   |
 | `REDIS_PORT`     | `6379`     | Redis port                                                     |
+| `REDIS_USER`     | unset      | Redis ACL user for `AUTH`; leave unset on plain Redis         |
+| `REDIS_PASSWORD` | unset      | Redis password for `AUTH`; must match the server's `requirepass` / ACL rule |
 | `LIMIT_PER_MINUTE` | `60`     | Token-bucket capacity per client key                         |
 | `BACKEND`        | `stub`     | Inference backend: `stub` or `llama`                          |
 | `LLM_BASE_URL`   | —          | Required when `BACKEND=llama`. Must be an absolute `https://` URL with a host (plaintext is rejected) |
@@ -145,15 +147,30 @@ which asserts a `200` followed by a `429` with a valid `Retry-After`.
 
 ### Security notes
 
-This project is a study, not a hardened product. Before exposing it beyond a trusted network:
+This project is a study, not a hardened product. Two known exposure points must be understood before
+running it anywhere but a trusted network:
 
-- **No authentication.** Quotas key by client IP (or by header only if your auth layer injects it).
-  Anyone who can reach the port can spend quotas; put real identity and TLS termination in front of it.
-- **IP keys behind NAT/CGNAT are shared.** Many users behind one egress IP share a single budget and
-  can exhaust each other's allowance. For per-user limits set `RATELIMIT_CLIENT_ID` to a header that
-  only your trusted authentication layer sets.
+- **Unauthenticated inference endpoint (by design).** The gateway binds all interfaces (`0.0.0.0`) and
+  the compose file publishes `8080` without TLS or authentication. Anyone who can reach the port can
+  consume LLM inference; the only cost control is the per-client rate limit. Before exposing it beyond
+  a trusted network, put an authenticating reverse proxy (API key / OAuth + TLS) in front and stop
+  publishing the raw port — do not rely on the rate limit as a security boundary.
+- **Quota identity via client-controlled header.** When `RATELIMIT_CLIENT_ID` is set, the quota
+  identity comes from an HTTP header that any caller can set or rotate, so clients can impersonate
+  other identities or bypass limits by rotating values. Only enable this if a trusted authentication
+  layer injects the header *and* strips untrusted incoming values. Otherwise leave it unset so the
+  identity falls back to the source IP. Note that IP keys behind NAT/CGNAT are shared: many users
+  behind one egress IP share a single budget and can exhaust each other's allowance.
 - **Backend trust is explicit.** The llama backend requires an `https://` URL; pin the signing CA with
   `LLM_TRUSTSTORE` instead of relying on the platform trust store.
+- **Redis is authenticated in the compose stack** (`requirepass`, overridable through the
+  `REDIS_PASSWORD` environment variable). If you run your own Redis, keep AUTH enabled and point the
+  gateway at it with `REDIS_USER` / `REDIS_PASSWORD`.
+- **`GET /metrics` is restricted to loopback peers.** It rejects requests carrying proxy headers
+  (`X-Forwarded-For`, `X-Real-Ip`) so a same-host reverse proxy cannot open it. Consequence: scraping
+  metrics from outside the container/host network — including through the published port, where traffic
+  does not always arrive as loopback — will get `403`. Scrape it from inside the host (sidecar,
+  `docker exec`, or a node exporter on the gateway box) instead.
 
 ---
 

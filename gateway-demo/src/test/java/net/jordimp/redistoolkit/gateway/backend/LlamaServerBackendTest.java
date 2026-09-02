@@ -5,8 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 class LlamaServerBackendTest {
@@ -51,5 +55,23 @@ class LlamaServerBackendTest {
         InferenceBackend llama = new LlamaServerBackend(URI.create("https://llama.local/v1"), HttpClient.newHttpClient(), json);
         assertThat(stub.complete(new CompletionRequest("stub", "hi")).text()).isNotBlank();
         assertThat(llama).isInstanceOf(InferenceBackend.class);
+    }
+
+    @Test
+    void readBounded_returnsFullBody_whenUnderCap() throws Exception {
+        String body = "{\"id\":\"a\",\"choices\":[{\"text\":\"ok\"}]}";
+        try (InputStream in = new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8))) {
+            assertThat(LlamaServerBackend.readBounded(in, 1024)).isEqualTo(body);
+        }
+    }
+
+    @Test
+    void readBounded_throws_whenResponseExceedsCap() {
+        byte[] huge = new byte[5_000];
+        Arrays.fill(huge, (byte) 'x');
+        InputStream in = new ByteArrayInputStream(huge);
+        assertThatThrownBy(() -> LlamaServerBackend.readBounded(in, 1_024))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("exceeds maximum size");
     }
 }

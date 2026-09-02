@@ -14,8 +14,12 @@ import java.util.Map;
 
 public class InMemoryQuotaStore implements QuotaStore {
 
-    /** Default LRU cap: beyond this many distinct keys the least-recently-used bucket is evicted (and its quota resets). */
-    public static final int DEFAULT_MAX_BUCKETS = 10_000;
+    /**
+     * Default LRU cap: beyond this many distinct keys the least-recently-used bucket is evicted (and its
+     * quota resets). Sized so that exhausting it requires a large burst of distinct client identities,
+     * which keeps cache-thrashing attacks impractical while staying cheap in memory (~a few MB worst case).
+     */
+    public static final int DEFAULT_MAX_BUCKETS = 50_000;
 
     private final Map<String, TokenBucketState> buckets;
 

@@ -3,8 +3,11 @@ package net.jordimp.redistoolkit.gateway.backend;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,6 +21,8 @@ public final class LlamaServerBackend implements InferenceBackend {
     private static final String PATH = "/v1/completions";
     private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(30);
     private static final int MAX_ERROR_BODY_CHARS = 200;
+    /** Hard cap on the backend response: a hostile or broken llama-server must not be able to OOM the gateway. */
+    private static final int MAX_RESPONSE_BYTES = 1_048_576;
 
     private final URI baseUrl;
     private final HttpClient client;
@@ -58,14 +63,32 @@ public final class LlamaServerBackend implements InferenceBackend {
                 .build();
 
         try {
-            HttpResponse<String> response = client.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-            return parseResponse(response.body());
+            HttpResponse<InputStream> response = client.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+            String body = readBounded(response.body(), MAX_RESPONSE_BYTES);
+            return parseResponse(body);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while calling llama-server", e);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to call llama-server at " + baseUrl, e);
         }
+    }
+
+    /** Reads at most {@code maxBytes} from the stream; throws when the backend exceeds the cap. */
+    static String readBounded(InputStream in, int maxBytes) throws IOException {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream(Math.min(maxBytes, 4096));
+        byte[] chunk = new byte[4096];
+        int total = 0;
+        int n;
+        while ((n = in.read(chunk)) != -1) {
+            total += n;
+            if (total > maxBytes) {
+                throw new IllegalStateException(
+                        "llama-server response exceeds maximum size of " + maxBytes + " bytes");
+            }
+            buffer.write(chunk, 0, n);
+        }
+        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
     }
 
     String requestBody(CompletionRequest request) {

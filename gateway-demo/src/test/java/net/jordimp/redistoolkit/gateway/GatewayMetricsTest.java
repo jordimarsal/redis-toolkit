@@ -98,6 +98,25 @@ class GatewayMetricsTest {
         }
     }
 
+    @Test
+    void metricsEndpoint_rejectsProxiedRequests_evenWhenTcpPeerIsLoopback() throws Exception {
+        // Behind a reverse proxy every external client arrives from loopback; forwarding headers
+        // mark such requests so the loopback check cannot be bypassed by topology alone.
+        HttpResponse<String> viaXff = http.send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/metrics"))
+                .header("X-Forwarded-For", "203.0.113.7")
+                .GET()
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(viaXff.statusCode()).isEqualTo(403);
+
+        HttpResponse<String> viaRealIp = http.send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + port + "/metrics"))
+                .header("X-Real-Ip", "203.0.113.8")
+                .GET()
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(viaRealIp.statusCode()).isEqualTo(403);
+    }
+
     private static QuotaStore failingPrimary() {
         return (key, spec, now) -> {
             throw new JedisConnectionException("simulated redis outage");

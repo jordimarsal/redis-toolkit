@@ -16,9 +16,9 @@ Thumbs.db
 # Harness / SDD scaffolding (kept locally, not published)
 .claude/
 init.sh
-[C|A]*.md
-f*
-specs*
-verification*
+AGENTS.md
+CLAUDE.md
+CHECKPOINTS.md
+feature_list.json
 progress/
 specs/
