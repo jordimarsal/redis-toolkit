@@ -233,6 +233,39 @@ Time is always obtained through the injected `Clock`, so unit tests are fully de
 [`docs/architecture.md`](docs/architecture.md) for the full quality standards and discarded
 alternatives.
 
+#### Running the demo
+
+`jobqueue-infra` ships a runnable that exercises the whole path — submit mixed priorities plus an
+idempotent pair and a delayed job, promote it, then drain with the real `WorkerLoop`. Build the
+classpath once (Jedis included) and run it offline or live:
+
+```bash
+mvn -q -pl jobqueue-infra dependency:build-classpath -Dmdep.outputFile=/tmp/jq_cp.txt
+```
+
+```bash
+# Offline, on any JDK 25+ (uses the in-memory store):
+java -cp "$(cat /tmp/jq_cp.txt):jobqueue-infra/target/classes:jobqueue-core/target/classes" \
+  net.jordimp.redistoolkit.jobqueue.infra.demo.JobQueueDemo
+
+# Against the same Redis as the compose stack (service `redis`, password `redis-dev-password`):
+REDIS_HOST=redis REDIS_PASSWORD=redis-dev-password java -cp "$(cat /tmp/jq_cp.txt):jobqueue-infra/target/classes:jobqueue-core/target/classes" \
+  net.jordimp.redistoolkit.jobqueue.infra.demo.JobQueueDemo
+```
+
+The output is deterministic and ends with the delivery order plus metrics:
+
+```
+processed 5 job(s), in priority order:
+  - high-priority-job
+  - normal-job
+  - idempotent-work
+  - delayed-job
+  - low-priority-job
+delivered=5 failed=0
+pending unacked=0
+```
+
 ---
 
 ## Testing & verification
@@ -244,6 +277,7 @@ The suite is organised around a **shared contract**: both stores must satisfy th
 |-----------------------------|------------------------------------------------------------|
 | Value-object behaviour      | domain VOs: validation, refill, header rendering           |
 | Store parity                | shared `QuotaStoreContractTest` against each store          |
+| Job queue parity            | shared `JobQueueE2EContract` through `WorkerLoop`: InMemory + Redis (Testcontainers) |
 | Concurrency                 | 100 parallel requests admit exactly the configured limit    |
 | Multi-replica accounting    | several keys sharing one budget exhaust it only once        |
 | Redis integration           | Testcontainers Redis with the atomic Lua script             |
