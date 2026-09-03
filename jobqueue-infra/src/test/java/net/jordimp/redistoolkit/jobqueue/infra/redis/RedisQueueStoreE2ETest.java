@@ -25,7 +25,10 @@ public final class RedisQueueStoreE2ETest extends JobQueueE2EContract {
 
     @BeforeAll
     static void startRedis() {
-        redis = new GenericContainer<>(DockerImageName.parse("redis:7")).withExposedPorts(REDIS_PORT);
+        // Pinned by digest so the image cannot drift under us, matching docker-compose.yml.
+        redis = new GenericContainer<>(
+                DockerImageName.parse("redis:7@sha256:71da9275c5f3fcb97d0fa0c8c5b36cc995327265420f17a04bfd544f458059f7"))
+                        .withExposedPorts(REDIS_PORT);
         redis.start();
         pool = new JedisPool(redis.getHost(), redis.getMappedPort(REDIS_PORT));
     }

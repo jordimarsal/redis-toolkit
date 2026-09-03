@@ -14,6 +14,7 @@ import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -33,6 +34,10 @@ public final class JobQueueDemo {
     private static final String GROUP = "demo-group";
     private static final int REDIS_SOCKET_TIMEOUT_MS = 10_000;
     private static final int REDIS_CONNECT_TIMEOUT_MS = 10_000;
+    // Fail fast if the pool is exhausted instead of blocking indefinitely on getResource().
+    private static final long REDIS_POOL_MAX_WAIT_MS = 2_000L;
+    private static final long REDIS_MIN_EVICTABLE_IDLE_MS = 300_000L; // 5 minutes
+    private static final long REDIS_EVICTION_RUN_INTERVAL_MS = 30_000L; // evictor sweep every 30 s
 
     public static void main(String[] args) {
         QueueStore store = createStore();
@@ -95,6 +100,10 @@ public final class JobQueueDemo {
         JedisPoolConfig poolConfig = new JedisPoolConfig();
         poolConfig.setMaxTotal(8);
         poolConfig.setMaxIdle(4);
+        poolConfig.setTestOnBorrow(true);
+        poolConfig.setMinEvictableIdleTimeMillis(REDIS_MIN_EVICTABLE_IDLE_MS);
+        poolConfig.setTimeBetweenEvictionRunsMillis(REDIS_EVICTION_RUN_INTERVAL_MS);
+        poolConfig.setMaxWait(Duration.ofMillis(REDIS_POOL_MAX_WAIT_MS));
         DefaultJedisClientConfig clientConfig = DefaultJedisClientConfig.builder()
                 .connectionTimeoutMillis(REDIS_CONNECT_TIMEOUT_MS)
                 .socketTimeoutMillis(REDIS_SOCKET_TIMEOUT_MS)
