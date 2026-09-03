@@ -266,6 +266,8 @@ delivered=5 failed=0
 pending unacked=0
 ```
 
+> **Connection.** The demo talks to Redis over an **unencrypted TCP socket** (no TLS) — acceptable on the local compose network where Redis lives behind `requirepass`, but point `REDIS_HOST`/`REDIS_PASSWORD` at a TLS-enabled Redis (with client-certificate verification if required) when running it elsewhere.
+
 ---
 
 ## Testing & verification
