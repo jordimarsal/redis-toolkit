@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import net.jordimp.redistoolkit.gateway.GatewayApp;
 import net.jordimp.redistoolkit.gateway.backend.StubBackend;
@@ -27,12 +28,19 @@ class BenchmarkRunnerTest {
 
     @BeforeEach
     void startGateway() {
-        Clock clock = () -> Instant.now();
+        Clock clock = Instant::now;
         RateLimiterService service = new RateLimiterService(clock, new InMemoryQuotaStore());
         KeyExtractor extractor = new KeyExtractor();
         RateLimitRegistry registry = new RateLimitRegistry(Map.of("/v1/completions", RateLimitSpec.perMinute(10_000)));
         DecisionMapper mapper = new DecisionMapper();
-        GatewayApp app = new GatewayApp(service, extractor, registry, mapper, new StubBackend(), new ObjectMapper());
+        GatewayApp app = GatewayApp.builder()
+                .service(service)
+                .extractor(extractor)
+                .registry(registry)
+                .mapper(mapper)
+                .backend(new StubBackend())
+                .json(new ObjectMapper())
+                .build();
         javalin = app.start(0);
         port = app.port();
     }
@@ -62,5 +70,22 @@ class BenchmarkRunnerTest {
         assertThatThrownBy(() -> BenchmarkRunner.run("http://localhost:1", 5))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("unreachable");
+    }
+
+    @Test
+    void percentile_clampsIndexIntoBounds() {
+        List<Double> values = List.of(10.0, 20.0, 30.0, 40.0, 50.0);
+
+        assertThat(BenchmarkRunner.percentile(values, 0.0)).isEqualTo(10.0);
+        assertThat(BenchmarkRunner.percentile(values, 0.5)).isEqualTo(30.0);
+        assertThat(BenchmarkRunner.percentile(values, 0.95)).isEqualTo(50.0);
+        assertThat(BenchmarkRunner.percentile(values, 1.0)).isEqualTo(50.0);
+    }
+
+    @Test
+    void percentile_clampsLowQuantileToFirstElement() {
+        List<Double> values = List.of(1.0, 2.0, 3.0);
+
+        assertThat(BenchmarkRunner.percentile(values, -1.0)).isEqualTo(1.0);
     }
 }

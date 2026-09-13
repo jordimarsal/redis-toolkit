@@ -30,9 +30,12 @@ import net.jordimp.redistoolkit.ratelimit.domain.QuotaKey;
 import net.jordimp.redistoolkit.ratelimit.domain.RateLimitSpec;
 import net.jordimp.redistoolkit.ratelimit.domain.Reason;
 import net.jordimp.redistoolkit.ratelimit.usecase.RateLimiterService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class GatewayApp {
 
+    private static final Logger LOG = LoggerFactory.getLogger(GatewayApp.class);
     private static final String ROUTE = "/v1/completions";
     private static final String METRICS_ROUTE = "/metrics";
     private static final String DECISIONS_COUNTER = "ratelimit_decisions_total";
@@ -56,40 +59,86 @@ public final class GatewayApp {
     private boolean stopped;
     private String clientIdHeader;
 
-    public GatewayApp(RateLimiterService service,
-                      KeyExtractor extractor,
-                      RateLimitRegistry registry,
-                      DecisionMapper mapper,
-                      InferenceBackend backend,
-                      ObjectMapper json) {
-        this(service, extractor, registry, mapper, backend, json, null, null);
-    }
-
-    public GatewayApp(RateLimiterService service,
-                      KeyExtractor extractor,
-                      RateLimitRegistry registry,
-                      DecisionMapper mapper,
-                      InferenceBackend backend,
-                      ObjectMapper json,
-                      CollectorRegistry metricsRegistry,
-                      AutoCloseable resource) {
-        this.service = service;
-        this.extractor = extractor;
-        this.registry = registry;
-        this.mapper = mapper;
-        this.backend = backend;
-        this.json = json;
-        this.metricsRegistry = metricsRegistry;
-        this.resource = resource;
-        if (metricsRegistry != null) {
+    private GatewayApp(Builder b) {
+        this.service = b.service;
+        this.extractor = b.extractor;
+        this.registry = b.registry;
+        this.mapper = b.mapper;
+        this.backend = b.backend;
+        this.json = b.json;
+        this.metricsRegistry = b.metricsRegistry;
+        this.resource = b.resource;
+        if (b.metricsRegistry != null) {
             this.decisions = Counter.build()
                     .name(DECISIONS_COUNTER)
                     .help("Rate-limit decisions produced by the gateway.")
                     .labelNames("result")
                     .create();
-            metricsRegistry.register(decisions);
+            b.metricsRegistry.register(decisions);
         } else {
             this.decisions = null;
+        }
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static final class Builder {
+        private RateLimiterService service;
+        private KeyExtractor extractor;
+        private RateLimitRegistry registry;
+        private DecisionMapper mapper;
+        private InferenceBackend backend;
+        private ObjectMapper json;
+        private CollectorRegistry metricsRegistry;
+        private AutoCloseable resource;
+
+        private Builder() {
+        }
+
+        public Builder service(RateLimiterService service) {
+            this.service = service;
+            return this;
+        }
+
+        public Builder extractor(KeyExtractor extractor) {
+            this.extractor = extractor;
+            return this;
+        }
+
+        public Builder registry(RateLimitRegistry registry) {
+            this.registry = registry;
+            return this;
+        }
+
+        public Builder mapper(DecisionMapper mapper) {
+            this.mapper = mapper;
+            return this;
+        }
+
+        public Builder backend(InferenceBackend backend) {
+            this.backend = backend;
+            return this;
+        }
+
+        public Builder json(ObjectMapper json) {
+            this.json = json;
+            return this;
+        }
+
+        public Builder metricsRegistry(CollectorRegistry metricsRegistry) {
+            this.metricsRegistry = metricsRegistry;
+            return this;
+        }
+
+        public Builder resource(AutoCloseable resource) {
+            this.resource = resource;
+            return this;
+        }
+
+        public GatewayApp build() {
+            return new GatewayApp(this);
         }
     }
 
@@ -102,8 +151,9 @@ public final class GatewayApp {
             this.clientIdHeader = envHeader.trim();
         }
         if (this.clientIdHeader != null) {
-            System.err.println("WARNING: RATELIMIT_CLIENT_ID='" + this.clientIdHeader + "' makes the quota identity come from a "
-                    + "client-controlled header. Only enable this if the header is injected by a trusted authentication layer.");
+            LOG.warn("RATELIMIT_CLIENT_ID='{}' makes the quota identity come from a "
+                    + "client-controlled header. Only enable this if the header is injected by a trusted authentication layer.",
+                    this.clientIdHeader);
         }
         this.app.post(ROUTE, this::handleCompletions);
         if (metricsRegistry != null) {
@@ -173,7 +223,7 @@ public final class GatewayApp {
     private static boolean isLoopback(String remoteAddr) {
         try {
             return InetAddress.getByName(remoteAddr).isLoopbackAddress();
-        } catch (UnknownHostException e) {
+        } catch (UnknownHostException _) {
             return false;
         }
     }
@@ -182,7 +232,7 @@ public final class GatewayApp {
         String rawBody;
         try {
             rawBody = readBoundedBody(ctx);
-        } catch (IOException e) {
+        } catch (IOException _) {
             writeJson(ctx, 400, Map.of(), new ErrorBody("bad_request", "Invalid JSON body"));
             return;
         }
@@ -194,7 +244,7 @@ public final class GatewayApp {
         CompletionRequest request;
         try {
             request = parseRequest(rawBody);
-        } catch (Exception e) {
+        } catch (Exception _) {
             writeJson(ctx, 400, Map.of(), new ErrorBody("bad_request", "Invalid JSON body"));
             return;
         }
@@ -206,7 +256,7 @@ public final class GatewayApp {
         QuotaKey key;
         try {
             key = extractor.extract(Dimension.IP, resolveClientId(ctx));
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException _) {
             writeJson(ctx, 400, Map.of(), new ErrorBody("invalid_client_id",
                     "Client identifier exceeds allowed length or contains invalid characters"));
             return;
@@ -224,7 +274,7 @@ public final class GatewayApp {
                     successBody = backend.complete(request);
                 }
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException _) {
             writeJson(ctx, 500, Map.of(), new ErrorBody("backend_error", "Inference backend failure"));
             return;
         }
@@ -288,7 +338,7 @@ public final class GatewayApp {
         try {
             String out = (body == null) ? "" : json.writeValueAsString(body);
             ctx.result(out);
-        } catch (Exception e) {
+        } catch (Exception _) {
             ctx.status(500);
             ctx.result("");
         }

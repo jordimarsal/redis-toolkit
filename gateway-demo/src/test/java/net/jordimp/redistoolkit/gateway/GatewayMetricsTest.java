@@ -45,7 +45,15 @@ class GatewayMetricsTest {
         DecisionMapper mapper = new DecisionMapper();
         ObjectMapper json = new ObjectMapper();
         CollectorRegistry metrics = new CollectorRegistry();
-        GatewayApp app = new GatewayApp(service, extractor, registry, mapper, new StubBackend(), json, metrics, null);
+        GatewayApp app = GatewayApp.builder()
+                .service(service)
+                .extractor(extractor)
+                .registry(registry)
+                .mapper(mapper)
+                .backend(new StubBackend())
+                .json(json)
+                .metricsRegistry(metrics)
+                .build();
         javalin = app.start(0);
         port = app.port();
         http = HttpClient.newHttpClient();
@@ -81,7 +89,15 @@ class GatewayMetricsTest {
         RateLimitRegistry limits = new RateLimitRegistry(Map.of(ROUTE, RateLimitSpec.perMinute(5)));
         DecisionMapper mapper = new DecisionMapper();
         ObjectMapper json = new ObjectMapper();
-        GatewayApp app = new GatewayApp(service, extractor, limits, mapper, new StubBackend(), json, registry, null);
+        GatewayApp app = GatewayApp.builder()
+                .service(service)
+                .extractor(extractor)
+                .registry(limits)
+                .mapper(mapper)
+                .backend(new StubBackend())
+                .json(json)
+                .metricsRegistry(registry)
+                .build();
         Javalin local = app.start(0);
         try {
             int localPort = app.port();

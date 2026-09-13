@@ -35,7 +35,7 @@ class ComposeFileTest {
         assertThat(asMap(redis.get("healthcheck"))).isNotEmpty();
 
         Map<String, Object> gateway = asMap(services.get("gateway"));
-        assertThat(gateway.get("build")).isEqualTo(".");
+        assertThat(gateway).containsEntry("build", ".");
         assertThat(asList(gateway.get("ports"))).contains("8080:8080");
         assertThat(asMap(gateway.get("depends_on"))).containsKey("redis");
 

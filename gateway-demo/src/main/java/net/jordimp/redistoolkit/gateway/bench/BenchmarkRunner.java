@@ -9,8 +9,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class BenchmarkRunner {
+
+    private static final Logger LOG = LoggerFactory.getLogger(BenchmarkRunner.class);
 
     public record Summary(long ok, long failed, double meanMs, double p95Ms, double p99Ms, double rps) {
         public String render() {
@@ -22,7 +27,7 @@ public final class BenchmarkRunner {
     private BenchmarkRunner() {
     }
 
-    public static Summary run(String baseUrl, int n) throws IOException {
+    public static Summary run(String baseUrl, int n) throws IllegalStateException {
         if (n <= 0) {
             throw new IllegalArgumentException("n must be > 0");
         }
@@ -49,10 +54,10 @@ public final class BenchmarkRunner {
                 } else {
                     failed++;
                 }
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 failed++;
-            } catch (IOException e) {
+            } catch (IOException _) {
                 failed++;
             } finally {
                 latencies.add((System.nanoTime() - t0) / 1_000_000.0);
@@ -72,25 +77,25 @@ public final class BenchmarkRunner {
                 .build();
     }
 
-    private static double percentile(List<Double> values, double q) {
+    static double percentile(List<Double> values, double q) {
         List<Double> sorted = new ArrayList<>(values);
         sorted.sort(Double::compareTo);
         int idx = (int) Math.ceil(q * sorted.size()) - 1;
-        return sorted.get(Math.max(0, Math.min(idx, sorted.size() - 1)));
+        return sorted.get(Math.clamp(idx, 0, sorted.size() - 1));
     }
 
-    public static void main(String[] args) throws IOException {
+    static void main(String[] args) {
         if (args.length < 1 || args[0].isBlank()) {
-            System.err.println("usage: BenchmarkRunner <base-url> [n]");
+            LOG.error("usage: BenchmarkRunner <base-url> [n]");
             System.exit(2);
         }
         int n = args.length > 1 ? Integer.parseInt(args[1]) : 100;
         try {
             Summary summary = run(args[0], n);
-            System.out.println(summary.render());
+            LOG.info("{}", (Supplier<String>) summary::render);
             System.exit(summary.failed() > 0 ? 1 : 0);
         } catch (IllegalStateException e) {
-            System.err.println(e.getMessage());
+            LOG.error("Benchmark run failed", e);
             System.exit(1);
         }
     }

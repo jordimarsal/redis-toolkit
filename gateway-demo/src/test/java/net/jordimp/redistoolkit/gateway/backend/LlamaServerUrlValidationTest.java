@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class LlamaServerUrlValidationTest {
 
@@ -19,23 +21,15 @@ class LlamaServerUrlValidationTest {
                 .doesNotThrowAnyException();
     }
 
-    @Test
-    void rejects_httpScheme() {
-        assertThatThrownBy(() -> new LlamaServerBackend(URI.create("http://llama.example.com/v1"), client, json))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("https");
-    }
-
-    @Test
-    void rejects_relativeUri() {
-        assertThatThrownBy(() -> new LlamaServerBackend(URI.create("/v1/completions"), client, json))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("https");
-    }
-
-    @Test
-    void rejects_httpsWithoutHost() {
-        assertThatThrownBy(() -> new LlamaServerBackend(URI.create("https://"), client, json))
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://llama.example.com/v1",
+            "/v1/completions",
+            "https:///v1/completions"
+    })
+    void rejectsUrlThatIsNotAbsoluteHttpsWithHost(String rawUri) {
+        URI uri = URI.create(rawUri);
+        assertThatThrownBy(() -> new LlamaServerBackend(uri, client, json))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("https");
     }

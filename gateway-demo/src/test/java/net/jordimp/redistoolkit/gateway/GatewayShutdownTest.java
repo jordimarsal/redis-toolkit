@@ -42,7 +42,16 @@ class GatewayShutdownTest {
         DecisionMapper mapper = new DecisionMapper();
         ObjectMapper json = new ObjectMapper();
         CollectorRegistry metrics = new CollectorRegistry();
-        app = new GatewayApp(service, extractor, registry, mapper, new StubBackend(), json, metrics, () -> closed.set(true));
+        app = GatewayApp.builder()
+                .service(service)
+                .extractor(extractor)
+                .registry(registry)
+                .mapper(mapper)
+                .backend(new StubBackend())
+                .json(json)
+                .metricsRegistry(metrics)
+                .resource(() -> closed.set(true))
+                .build();
 
         app.start(0);
         assertThat(closed.get()).isFalse();

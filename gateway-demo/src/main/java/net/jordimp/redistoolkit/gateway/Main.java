@@ -30,6 +30,8 @@ import net.jordimp.redistoolkit.ratelimit.infra.resilience.ResilientQuotaStore;
 import net.jordimp.redistoolkit.ratelimit.port.Clock;
 import net.jordimp.redistoolkit.ratelimit.port.QuotaStore;
 import net.jordimp.redistoolkit.ratelimit.usecase.RateLimiterService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.clients.jedis.DefaultJedisClientConfig;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisPool;
@@ -37,6 +39,7 @@ import redis.clients.jedis.JedisPoolConfig;
 
 public final class Main {
 
+    private static final Logger LOG = LoggerFactory.getLogger(Main.class);
     private static final String ROUTE = "/v1/completions";
     private static final int DEFAULT_REDIS_PORT = 6379;
     private static final int DEFAULT_PORT = 8080;
@@ -55,7 +58,7 @@ public final class Main {
     }
 
     public static void main(String[] args) {
-        Clock clock = () -> Instant.now();
+        Clock clock = Instant::now;
         CollectorRegistry metrics = CollectorRegistry.defaultRegistry;
         StoreWiring wiring = createStoreWiring(System.getenv("REDIS_HOST"), parseRedisPort(), metrics);
         RateLimiterService service = new RateLimiterService(clock, wiring.store());
@@ -65,10 +68,19 @@ public final class Main {
         ObjectMapper json = new ObjectMapper();
 
         InferenceBackend backend = createBackend(System.getenv("BACKEND"), System.getenv("LLM_BASE_URL"), System.getenv("LLM_TRUSTSTORE"));
-        GatewayApp app = new GatewayApp(service, extractor, registry, mapper, backend, json, metrics, wiring.resource());
+        GatewayApp app = GatewayApp.builder()
+                .service(service)
+                .extractor(extractor)
+                .registry(registry)
+                .mapper(mapper)
+                .backend(backend)
+                .json(json)
+                .metricsRegistry(metrics)
+                .resource(wiring.resource())
+                .build();
         Runtime.getRuntime().addShutdownHook(new Thread(app::stop));
         app.start(parsePort(args));
-        System.out.println("gateway-demo listening on http://localhost:" + app.port() + "  (POST /v1/completions)");
+        LOG.info("gateway-demo listening on http://localhost:{}  (POST /v1/completions)", app.port());
     }
 
     static StoreWiring createStoreWiring(String redisHost, int redisPort, CollectorRegistry metrics) {
@@ -150,7 +162,7 @@ public final class Main {
                 KeyStore keyStore = KeyStore.getInstance(type);
                 keyStore.load(new ByteArrayInputStream(bytes), null);
                 return keyStore;
-            } catch (IOException notThisFormat) {
+            } catch (IOException _) {
                 // try the next supported format
             }
         }

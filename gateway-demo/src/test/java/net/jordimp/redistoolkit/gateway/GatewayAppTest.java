@@ -50,7 +50,14 @@ class GatewayAppTest {
         RateLimitRegistry registry = new RateLimitRegistry(Map.of(ROUTE, RateLimitSpec.perMinute(3)));
         DecisionMapper mapper = new DecisionMapper();
         ObjectMapper json = new ObjectMapper();
-        return new GatewayApp(service, extractor, registry, mapper, new StubBackend(), json);
+        return GatewayApp.builder()
+                .service(service)
+                .extractor(extractor)
+                .registry(registry)
+                .mapper(mapper)
+                .backend(new StubBackend())
+                .json(json)
+                .build();
     }
 
     @AfterEach

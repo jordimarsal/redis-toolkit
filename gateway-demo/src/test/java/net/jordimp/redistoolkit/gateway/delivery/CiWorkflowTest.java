@@ -27,22 +27,21 @@ class CiWorkflowTest {
         Map<String, Object> doc = workflow();
 
         Map<String, Object> on = asMap(doc.get("on"));
-        assertThat(on.keySet()).contains("push", "pull_request");
+        assertThat(on).containsKeys("push", "pull_request");
 
         Map<String, Object> concurrency = asMap(doc.get("concurrency"));
-        assertThat(concurrency.get("cancel-in-progress")).isEqualTo(true);
+        assertThat(concurrency).containsEntry("cancel-in-progress", true);
         assertThat(String.valueOf(concurrency.get("group"))).contains("github.ref");
 
         Map<String, Object> jobs = asMap(doc.get("jobs"));
-        assertThat(jobs.keySet()).contains("test", "style", "compose-smoke");
+        assertThat(jobs).containsKeys("test", "style", "compose-smoke");
 
         List<Object> steps = asList(asMap(jobs.get("test")).get("steps"));
         String allSteps = steps.stream()
                 .map(s -> String.valueOf(asMap(s).getOrDefault("run", "")))
                 .collect(Collectors.joining("\n"));
         // CI runs the real build/tests directly; it must not depend on the harness (init.sh).
-        assertThat(allSteps).contains("mvn test");
-        assertThat(allSteps).doesNotContain("./init.sh");
+        assertThat(allSteps).contains("mvn test").doesNotContain("./init.sh");
 
         List<Object> styleSteps = asList(asMap(jobs.get("style")).get("steps"));
         String styleRun = styleSteps.stream()
