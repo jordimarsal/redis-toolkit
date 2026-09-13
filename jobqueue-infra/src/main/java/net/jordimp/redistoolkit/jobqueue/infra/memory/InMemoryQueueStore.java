@@ -67,34 +67,35 @@ public final class InMemoryQueueStore implements QueueStore {
 
     @Override
     public synchronized Optional<ClaimedJob> claim(String groupId, int maxPoll) {
+        if (maxPoll <= 0) {
+            return Optional.empty();
+        }
         List<Stored> currentPending = pendingByGroup.computeIfAbsent(groupId, k -> new java.util.ArrayList<>());
-        int delivered = 0;
-        outer:
         for (Priority p : new Priority[]{Priority.HIGH, Priority.NORMAL, Priority.LOW}) {
             for (Stored candidate : allJobs.get(p)) {
-                if (delivered >= maxPoll) {
-                    break outer;
+                if (isDeliverable(groupId, currentPending, candidate)) {
+                    currentPending.add(candidate);
+                    String dedupKey = candidate.dedupKey();
+                    if (dedupKey != null) {
+                        markSeen(dedupKey);
+                    }
+                    return Optional.of(new ClaimedJob(candidate.jobId(), candidate.payload(), dedupKey, 1));
                 }
-                JobId id = candidate.jobId();
-                if (currentPending.stream().anyMatch(s -> s.jobId().equals(id))) {
-                    continue;
-                }
-                if (ackedByGroup.getOrDefault(groupId, Set.of()).contains(id)) {
-                    continue;
-                }
-                String dedupKey = candidate.dedupKey();
-                if (dedupKey != null && isSeen(dedupKey)) {
-                    continue;
-                }
-                currentPending.add(candidate);
-                if (dedupKey != null) {
-                    markSeen(dedupKey);
-                }
-                delivered++;
-                return Optional.of(new ClaimedJob(id, candidate.payload(), dedupKey, 1));
             }
         }
         return Optional.empty();
+    }
+
+    private boolean isDeliverable(String groupId, List<Stored> currentPending, Stored candidate) {
+        JobId id = candidate.jobId();
+        if (currentPending.stream().anyMatch(s -> s.jobId().equals(id))) {
+            return false;
+        }
+        if (ackedByGroup.getOrDefault(groupId, Set.of()).contains(id)) {
+            return false;
+        }
+        String dedupKey = candidate.dedupKey();
+        return dedupKey == null || !isSeen(dedupKey);
     }
 
     @Override

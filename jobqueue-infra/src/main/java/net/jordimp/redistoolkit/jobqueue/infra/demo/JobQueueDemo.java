@@ -9,6 +9,8 @@ import net.jordimp.redistoolkit.jobqueue.infra.redis.RedisQueueStore;
 import net.jordimp.redistoolkit.jobqueue.port.PendingStats;
 import net.jordimp.redistoolkit.jobqueue.port.QueueStore;
 import net.jordimp.redistoolkit.jobqueue.usecase.WorkerLoop;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import redis.clients.jedis.DefaultJedisClientConfig;
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.JedisPool;
@@ -31,6 +33,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class JobQueueDemo {
 
+    private static final Logger LOG = LoggerFactory.getLogger(JobQueueDemo.class);
     private static final String GROUP = "demo-group";
     private static final int REDIS_SOCKET_TIMEOUT_MS = 10_000;
     private static final int REDIS_CONNECT_TIMEOUT_MS = 10_000;
@@ -39,13 +42,13 @@ public final class JobQueueDemo {
     private static final long REDIS_MIN_EVICTABLE_IDLE_MS = 300_000L; // 5 minutes
     private static final long REDIS_EVICTION_RUN_INTERVAL_MS = 30_000L; // evictor sweep every 30 s
 
-    public static void main(String[] args) {
+    static void main() {
         QueueStore store = createStore();
         InMemoryMetrics metrics = new InMemoryMetrics();
         WorkerLoop worker = new WorkerLoop(GROUP, store, metrics);
 
-        System.out.println("jobqueue demo — using " + (store instanceof RedisQueueStore ? "Redis streams" : "in-memory store")
-                + "; consumer group '" + GROUP + "'");
+        LOG.info("jobqueue demo — using {}; consumer group '{}'",
+                store instanceof RedisQueueStore ? "Redis streams" : "in-memory store", GROUP);
 
         submitWorkload(store);
         store.promoteDelayed();
@@ -59,13 +62,13 @@ public final class JobQueueDemo {
         try {
             store.close();
         } catch (RuntimeException e) {
-            System.out.println("[demo] could not cleanly close store: " + e.getMessage());
+            LOG.info("[demo] could not cleanly close store: {}", e.getMessage());
         }
     }
 
     /** Priorities, an idempotent pair and a delayed job that is promoted before the loop drains. */
     static void submitWorkload(QueueStore store) {
-        System.out.println("[demo] submitting workload (priorities + dedup + delayed)...");
+        LOG.info("[demo] submitting workload (priorities + dedup + delayed)...");
         // Submitted last but must be consumed first: delivery follows priority, not arrival order.
         store.submit(Payload.of("low-priority-job".getBytes()), Priority.LOW, null);
         store.submit(Payload.of("normal-job".getBytes()), Priority.NORMAL, null);
@@ -79,16 +82,15 @@ public final class JobQueueDemo {
     }
 
     static void printSummary(QueueStore store, InMemoryMetrics metrics, List<String> processed) {
-        System.out.println("-----------------------------------------------");
-        System.out.println("processed " + processed.size() + " job(s), in priority order:");
+        LOG.info("-----------------------------------------------");
+        LOG.info("processed {} job(s), in priority order:", processed.size());
         for (String text : processed) {
-            System.out.println("  - " + text);
+            LOG.info("  - {}", text);
         }
-        System.out.println("delivered=" + metrics.count(GROUP, "delivered")
-                + " failed=" + metrics.count(GROUP, "failed"));
+        LOG.info("delivered={} failed={}", metrics.count(GROUP, "delivered"), metrics.count(GROUP, "failed"));
         PendingStats stats = store.pendingStats();
-        System.out.println("pending unacked=" + stats.unackedEntries());
-        System.out.println("(the two identical submissions collapsed into one delivery; the delayed job was promoted and delivered too)");
+        LOG.info("pending unacked={}", stats.unackedEntries());
+        LOG.info("(the two identical submissions collapsed into one delivery; the delayed job was promoted and delivered too)");
     }
 
     /** In-memory when {@code REDIS_HOST} is unset; otherwise a pooled Redis adapter honouring AUTH. */

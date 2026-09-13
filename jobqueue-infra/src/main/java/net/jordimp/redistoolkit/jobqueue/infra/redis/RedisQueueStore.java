@@ -28,6 +28,11 @@ public final class RedisQueueStore implements QueueStore {
 
     private static final int SEEN_TTL_SECONDS = 60;
 
+    private static final String JOBQUEUE_PREFIX = "jobqueue:";
+    private static final String FIELD_PAYLOAD = "payload";
+    private static final String FIELD_DEDUP = "dedup";
+    private static final String FIELD_STREAM = "stream";
+
     private static final String SEEN_CHECK_AND_SET =
         "if redis.call('EXISTS', KEYS[1]) == 1 then return '0' end "
         + "redis.call('SETEX', KEYS[1], ARGV[1], '1') return '1'";
@@ -49,17 +54,17 @@ public final class RedisQueueStore implements QueueStore {
     public SubmitResult submit(Payload payload, Priority priority, DedupKey dedupKey) {
         String streamKey = streamKey(priority);
         Map<String, String> fields = new HashMap<>();
-        fields.put("payload", Base64.getEncoder().encodeToString(payload.data()));
+        fields.put(FIELD_PAYLOAD, Base64.getEncoder().encodeToString(payload.data()));
         if (dedupKey != null) {
-            fields.put("dedup", dedupKey.raw());
+            fields.put(FIELD_DEDUP, dedupKey.raw());
         }
         String id;
         try (Jedis jedis = pool.getResource()) {
             id = jedis.xadd(streamKey, XAddParams.xAddParams(), fields).toString();
-            jedis.hset(jobHash(id), "stream", streamKey);
-            jedis.hset(jobHash(id), "payload", fields.get("payload"));
-            if (fields.containsKey("dedup")) {
-                jedis.hset(jobHash(id), "dedup", fields.get("dedup"));
+            jedis.hset(jobHash(id), FIELD_STREAM, streamKey);
+            jedis.hset(jobHash(id), FIELD_PAYLOAD, fields.get(FIELD_PAYLOAD));
+            if (fields.containsKey(FIELD_DEDUP)) {
+                jedis.hset(jobHash(id), FIELD_DEDUP, fields.get(FIELD_DEDUP));
             }
         }
         return new SubmitResult(queueName, JobId.of(id));
@@ -89,10 +94,10 @@ public final class RedisQueueStore implements QueueStore {
     public Optional<ClaimedJob> claim(String groupId, int maxPoll) {
         int scanned = 0;
         for (Priority p : new Priority[]{Priority.HIGH, Priority.NORMAL, Priority.LOW}) {
-            String streamKey = streamKey(p);
             if (scanned >= maxPoll) {
                 break;
             }
+            String streamKey = streamKey(p);
             List<StreamEntry> entries;
             try (Jedis jedis = pool.getResource()) {
                 ensureGroup(streamKey, groupId);
@@ -102,28 +107,26 @@ public final class RedisQueueStore implements QueueStore {
                 List<StreamEntry> list = (result == null) ? List.of() : result.getOrDefault(streamKey, List.of());
                 entries = (list == null || list.isEmpty()) ? List.of() : list;
             }
-            if (entries.isEmpty()) {
-                continue;
-            }
-            scanned++;
-            StreamEntry entry = entries.get(0);
-            String id = entry.getID().toString();
-            Map<String, String> fields = entry.getFields();
-            String dedupKey = fields.get("dedup");
-            if (dedupKey != null && !isNewlyMarkedSeen(dedupKey)) {
-                // Skip AND acknowledge: a duplicate left unacked would sit in the consumer PEL forever.
+            if (!entries.isEmpty()) {
+                scanned++;
+                StreamEntry entry = entries.get(0);
+                String id = entry.getID().toString();
+                Map<String, String> fields = entry.getFields();
+                String dedupKey = fields.get(FIELD_DEDUP);
+                if (dedupKey == null || isNewlyMarkedSeen(dedupKey)) {
+                    try (Jedis jedis = pool.getResource()) {
+                        jedis.sadd(pendingKey(groupId), id);
+                        jedis.sadd(pendingIndexKey(), pendingKey(groupId));
+                        jedis.hset(jobMapHash(id), FIELD_STREAM, streamKey);
+                    }
+                    return Optional.of(new ClaimedJob(JobId.of(id),
+                            Payload.of(Base64.getDecoder().decode(fields.get(FIELD_PAYLOAD))), dedupKey, 1));
+                }
+                // Duplicate already seen: skip AND acknowledge so it does not sit unacked in the consumer PEL forever.
                 try (Jedis jedis = pool.getResource()) {
                     jedis.xack(streamKey, redisGroup(groupId), new StreamEntryID(id));
                 }
-                continue;
             }
-            try (Jedis jedis = pool.getResource()) {
-                jedis.sadd(pendingKey(groupId), id);
-                jedis.sadd(pendingIndexKey(), pendingKey(groupId));
-                jedis.hset(jobMapHash(id), "stream", streamKey);
-            }
-            Payload payload = Payload.of(Base64.getDecoder().decode(fields.get("payload")));
-            return Optional.of(new ClaimedJob(JobId.of(id), payload, dedupKey, 1));
         }
         return Optional.empty();
     }
@@ -131,7 +134,7 @@ public final class RedisQueueStore implements QueueStore {
     @Override
     public void acknowledge(String groupId, ClaimedJob claimed) {
         try (Jedis jedis = pool.getResource()) {
-            String streamKey = jedis.hget(jobMapHash(claimed.jobId().raw()), "stream");
+            String streamKey = jedis.hget(jobMapHash(claimed.jobId().raw()), FIELD_STREAM);
             if (streamKey != null) {
                 jedis.xack(streamKey, redisGroup(groupId), new StreamEntryID(claimed.jobId().raw()));
             }
@@ -161,21 +164,24 @@ public final class RedisQueueStore implements QueueStore {
             if (moved >= maxClaim) {
                 break;
             }
-            Object result;
-            try (Jedis jedis = pool.getResource()) {
-                result = jedis.eval(RECLAIM_ONE_SCRIPT, 1, pendingKey, String.valueOf(maxClaim - moved));
-            }
-            if (!(result instanceof List<?> claimedIds)) {
-                continue; // empty Lua table comes back as nil
-            }
+            moved = reclaimFromPendingKey(pendingKey, maxClaim, moved);
+        }
+        return moved;
+    }
+
+    private int reclaimFromPendingKey(String pendingKey, int maxClaim, int moved) {
+        Object result;
+        try (Jedis jedis = pool.getResource()) {
+            result = jedis.eval(RECLAIM_ONE_SCRIPT, 1, pendingKey, String.valueOf(maxClaim - moved));
+        }
+        if (result instanceof List<?> claimedIds) {
             for (Object o : claimedIds) {
-                String id = (String) o;
-                if (!readdClean(id, streamOf(id), groupOf(pendingKey))) {
-                    continue;
-                }
-                moved++;
                 if (moved >= maxClaim) {
                     break;
+                }
+                String id = (String) o;
+                if (readdClean(id, streamOf(id), groupOf(pendingKey))) {
+                    moved++;
                 }
             }
         }
@@ -188,7 +194,7 @@ public final class RedisQueueStore implements QueueStore {
         try (Jedis jedis = pool.getResource()) {
             fields = new HashMap<>(jedis.hgetAll(jobHash(id)));
         }
-        fields.remove("stream"); // internal bookkeeping must never leak into a redelivered entry
+        fields.remove(FIELD_STREAM); // internal bookkeeping must never leak into a redelivered entry
         if (streamKey == null || streamKey.isEmpty() || fields.isEmpty()) {
             return false;
         }
@@ -202,7 +208,7 @@ public final class RedisQueueStore implements QueueStore {
 
     private String streamOf(String id) {
         try (Jedis jedis = pool.getResource()) {
-            return jedis.hget(jobMapHash(id), "stream");
+            return jedis.hget(jobMapHash(id), FIELD_STREAM);
         }
     }
 
@@ -276,12 +282,9 @@ public final class RedisQueueStore implements QueueStore {
             if (result == null) {
                 break; // no more due members
             }
-            if ("INVALID".equals(result)) {
-                continue; // corrupt member discarded; keep draining what is due
+            if (!"INVALID".equals(result)) {
+                promoted++;
             }
-            @SuppressWarnings("unchecked")
-            List<String> pair = (List<String>) result;
-            promoted++;
         }
         return promoted;
     }
@@ -289,7 +292,7 @@ public final class RedisQueueStore implements QueueStore {
     private void ensureGroup(String streamKey, String groupId) {
         try (Jedis jedis = pool.getResource()) {
             jedis.xgroupCreate(streamKey, redisGroup(groupId), new StreamEntryID(0L, 0L), true);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException _) {
             // group already exists
         }
     }
@@ -318,35 +321,35 @@ public final class RedisQueueStore implements QueueStore {
     }
 
     private String streamKey(Priority p) {
-        return "jobqueue:" + queueName + ":" + p.name();
+        return JOBQUEUE_PREFIX + queueName + ":" + p.name();
     }
 
     private String pendingKey(String groupId) {
-        return "jobqueue:" + queueName + ":pending:" + groupId;
+        return JOBQUEUE_PREFIX + queueName + ":pending:" + groupId;
     }
 
     private String pendingIndexKey() {
-        return "jobqueue:" + queueName + ":pending-index";
+        return JOBQUEUE_PREFIX + queueName + ":pending-index";
     }
 
     private String delayKey() {
-        return "jobqueue:" + queueName + ":delay";
+        return JOBQUEUE_PREFIX + queueName + ":delay";
     }
 
     private String delayMapKey() {
-        return "jobqueue:" + queueName + ":delaymap";
+        return JOBQUEUE_PREFIX + queueName + ":delaymap";
     }
 
     private String jobHash(String id) {
-        return "jobqueue:" + queueName + ":job:" + id;
+        return JOBQUEUE_PREFIX + queueName + ":job:" + id;
     }
 
     private String jobMapHash(String id) {
-        return "jobqueue:" + queueName + ":jobmap:" + id;
+        return JOBQUEUE_PREFIX + queueName + ":jobmap:" + id;
     }
 
     private String seenKey(String dedupKey) {
-        return "jobqueue:" + queueName + ":seen:" + dedupKey;
+        return JOBQUEUE_PREFIX + queueName + ":seen:" + dedupKey;
     }
 
     @Override

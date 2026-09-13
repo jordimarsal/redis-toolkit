@@ -28,8 +28,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
-public final class RedisQueueStoreContractTest extends QueueStoreContractTest {
+final class RedisQueueStoreContractTest extends QueueStoreContractTest {
 
     private static final int REDIS_PORT = 6379;
 
@@ -81,8 +82,10 @@ public final class RedisQueueStoreContractTest extends QueueStoreContractTest {
         // Own pool on purpose: closing the shared one would poison every later test in this class.
         try (JedisPool localPool = new JedisPool(redis.getHost(), redis.getMappedPort(REDIS_PORT))) {
             RedisQueueStore local = new RedisQueueStore(localPool, "close-" + counter.incrementAndGet());
-            local.close();
-            local.close();
+            assertThatCode(() -> {
+                local.close();
+                local.close();
+            }).doesNotThrowAnyException();
         }
     }
 
@@ -112,7 +115,7 @@ public final class RedisQueueStoreContractTest extends QueueStoreContractTest {
         try {
             List<Callable<Integer>> tasks = new ArrayList<>();
             for (int t = 0; t < 4; t++) {
-                tasks.add(() -> rstore.promoteDelayed());
+                tasks.add(rstore::promoteDelayed);
             }
             List<Future<Integer>> futures = exec.invokeAll(tasks);
             for (Future<Integer> f : futures) {
@@ -153,7 +156,7 @@ public final class RedisQueueStoreContractTest extends QueueStoreContractTest {
         try (Jedis jedis = pool.getResource()) {
             List<StreamEntry> entries = jedis.xrange(streamKey(Priority.NORMAL), "-", "+");
             assertThat(entries).hasSize(1);
-            assertThat(entries.get(0).getID().toString()).isEqualTo(real.raw());
+            assertThat(entries.get(0).getID()).hasToString(real.raw());
         }
     }
 }

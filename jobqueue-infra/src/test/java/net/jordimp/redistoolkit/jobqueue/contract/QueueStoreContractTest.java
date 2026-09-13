@@ -36,7 +36,7 @@ public abstract class QueueStoreContractTest {
     }
 
     @Test
-    void higherPriorityIsClaimedBeforeLowerPriority() throws Exception {
+    void higherPriorityIsClaimedBeforeLowerPriority() {
         QueueStore s = store();
         s.submit(payload("low"), Priority.LOW, null);
         s.submit(payload("high"), Priority.HIGH, null);
@@ -59,7 +59,7 @@ public abstract class QueueStoreContractTest {
             delivered.add(claimed.get());
         }
         Set<String> ids = delivered.stream().map(j -> j.jobId().raw()).collect(Collectors.toSet());
-        assertThat(delivered.size()).as("every job delivered").isEqualTo(total);
+        assertThat(delivered).as("every job delivered").hasSize(total);
         assertThat(ids).as("each job delivered once").hasSize(total);
     }
 
