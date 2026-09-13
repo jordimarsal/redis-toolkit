@@ -21,7 +21,7 @@ class DockerfileTest {
         assertThat(DOCKERFILE).as("missing %s", DOCKERFILE.toAbsolutePath()).exists();
         String content = Files.readString(DOCKERFILE);
         List<String> stages = splitStages(content);
-        assertThat(stages.size()).isGreaterThanOrEqualTo(2); // build stage + runtime stage
+        assertThat(stages).hasSizeGreaterThanOrEqualTo(2); // build stage + runtime stage
         String runtime = stages.get(stages.size() - 1);
         boolean nonRootUser = runtime.lines().anyMatch(line ->
                 line.startsWith("USER ") && !line.equals("USER root") && !line.equals("USER 0"));

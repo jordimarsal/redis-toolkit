@@ -13,7 +13,7 @@ class RedisQuotaStoreLifecycleTest {
         JedisPool pool = new JedisPool("localhost", 6379);
         RedisQuotaStore store = new RedisQuotaStore(pool);
         store.close();
-        assertThatThrownBy(() -> pool.getResource())
+        assertThatThrownBy(pool::getResource)
                 .isInstanceOf(JedisException.class)
                 .rootCause().isInstanceOf(IllegalStateException.class);
     }
