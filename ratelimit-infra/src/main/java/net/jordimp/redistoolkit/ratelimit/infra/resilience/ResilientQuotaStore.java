@@ -47,7 +47,7 @@ public final class ResilientQuotaStore implements QuotaStore, AutoCloseable {
             Decision decision = primary.evaluateAndConsume(key, spec, now);
             degraded.set(0);
             return decision;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException _) {
             failures.inc();
             degraded.set(1);
             if (policy == FailurePolicy.FAIL_CLOSED) {
@@ -55,7 +55,7 @@ public final class ResilientQuotaStore implements QuotaStore, AutoCloseable {
             }
             try {
                 return localFallback.evaluateAndConsume(key, spec, now);
-            } catch (RuntimeException fallbackFailure) {
+            } catch (RuntimeException _) {
                 return Decision.rejected(Reason.STORE_UNAVAILABLE, spec.limit(), Duration.ZERO);
             }
         }

@@ -119,7 +119,7 @@ public class RedisQuotaStore implements QuotaStore, AutoCloseable {
         String s = value.toString().trim();
         try {
             return Long.parseLong(s);
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException _) {
             return Math.round(Double.parseDouble(s));
         }
     }

@@ -17,7 +17,7 @@ import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class RedisQuotaStoreContractTest extends QuotaStoreContractTest {
+class RedisQuotaStoreContractTest extends QuotaStoreContractTest {
 
     private static final int REDIS_PORT = 6379;
 
@@ -25,6 +25,7 @@ public class RedisQuotaStoreContractTest extends QuotaStoreContractTest {
     private static JedisPool pool;
 
     @BeforeAll
+    @SuppressWarnings("resource")
     static void startRedis() {
         redis = new GenericContainer<>(DockerImageName.parse("redis:7")).withExposedPorts(REDIS_PORT);
         redis.start();
@@ -37,7 +38,7 @@ public class RedisQuotaStoreContractTest extends QuotaStoreContractTest {
             pool.close();
         }
         if (redis != null) {
-            redis.stop();
+            redis.close();
         }
     }
 

@@ -25,49 +25,52 @@ class ResilientQuotaStoreTest {
     void degradedLocal_returnsFallbackDecision_whenPrimaryFails() {
         CollectorRegistry registry = new CollectorRegistry();
         FailingPrimary primary = new FailingPrimary(true);
-        ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry);
+        try (ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {
 
-        Decision decision = store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
+            Decision decision = store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
 
-        assertThat(decision.isAllowed()).isTrue();
-        assertThat(decision.reason()).isEqualTo(Reason.OK);
-        assertThat(registry.getSampleValue("ratelimit_store_failures_total")).isEqualTo(1.0);
-        assertThat(registry.getSampleValue("ratelimit_degraded")).isEqualTo(1.0);
+            assertThat(decision.isAllowed()).isTrue();
+            assertThat(decision.reason()).isEqualTo(Reason.OK);
+            assertThat(registry.getSampleValue("ratelimit_store_failures_total")).isEqualTo(1.0);
+            assertThat(registry.getSampleValue("ratelimit_degraded")).isEqualTo(1.0);
+        }
     }
 
     @Test
     void degradedLocal_admitsWithinLocalBudget_thenLimitsExceededWhenExhausted() {
         CollectorRegistry registry = new CollectorRegistry();
         FailingPrimary primary = new FailingPrimary(true);
-        ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry);
-        RateLimitSpec spec = RateLimitSpec.of(2, Duration.ofSeconds(60), 2);
+        try (ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {
+            RateLimitSpec spec = RateLimitSpec.of(2, Duration.ofSeconds(60), 2);
 
-        Decision first = store.evaluateAndConsume(KEY, spec, NOW);
-        Decision second = store.evaluateAndConsume(KEY, spec, NOW);
-        Decision third = store.evaluateAndConsume(KEY, spec, NOW);
+            Decision first = store.evaluateAndConsume(KEY, spec, NOW);
+            Decision second = store.evaluateAndConsume(KEY, spec, NOW);
+            Decision third = store.evaluateAndConsume(KEY, spec, NOW);
 
-        assertThat(first.isAllowed()).isTrue();
-        assertThat(second.isAllowed()).isTrue();
-        assertThat(third.isAllowed()).isFalse();
-        assertThat(third.reason()).isEqualTo(Reason.LIMIT_EXCEEDED);
-        assertThat(third.retryAfterSeconds()).isGreaterThan(0L);
+            assertThat(first.isAllowed()).isTrue();
+            assertThat(second.isAllowed()).isTrue();
+            assertThat(third.isAllowed()).isFalse();
+            assertThat(third.reason()).isEqualTo(Reason.LIMIT_EXCEEDED);
+            assertThat(third.retryAfterSeconds()).isGreaterThan(0L);
+        }
     }
 
     @Test
     void recovery_resetsDegradedGauge_whenPrimarySucceedsAgain() {
         CollectorRegistry registry = new CollectorRegistry();
         FailingPrimary primary = new FailingPrimary(true);
-        ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry);
+        try (ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {
 
-        store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
-        assertThat(registry.getSampleValue("ratelimit_degraded")).isEqualTo(1.0);
+            store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
+            assertThat(registry.getSampleValue("ratelimit_degraded")).isEqualTo(1.0);
 
-        primary.fail = false;
-        Decision decision = store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
+            primary.fail = false;
+            Decision decision = store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
 
-        assertThat(decision.isAllowed()).isTrue();
-        assertThat(registry.getSampleValue("ratelimit_degraded")).isEqualTo(0.0);
-        assertThat(registry.getSampleValue("ratelimit_store_failures_total")).isEqualTo(1.0);
+            assertThat(decision.isAllowed()).isTrue();
+            assertThat(registry.getSampleValue("ratelimit_degraded")).isEqualTo(0.0);
+            assertThat(registry.getSampleValue("ratelimit_store_failures_total")).isEqualTo(1.0);
+        }
     }
 
     @Test
@@ -75,37 +78,39 @@ class ResilientQuotaStoreTest {
         CollectorRegistry registry = new CollectorRegistry();
         FailingPrimary primary = new FailingPrimary(true);
         RecordingFallback fallback = new RecordingFallback();
-        ResilientQuotaStore store = new ResilientQuotaStore(primary, fallback, FailurePolicy.FAIL_CLOSED, registry);
+        try (ResilientQuotaStore store = new ResilientQuotaStore(primary, fallback, FailurePolicy.FAIL_CLOSED, registry)) {
 
-        Decision decision = store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
+            Decision decision = store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
 
-        assertThat(decision.isAllowed()).isFalse();
-        assertThat(decision.reason()).isEqualTo(Reason.STORE_UNAVAILABLE);
-        assertThat(fallback.calls).isZero();
-        assertThat(registry.getSampleValue("ratelimit_store_failures_total")).isEqualTo(1.0);
-        assertThat(registry.getSampleValue("ratelimit_degraded")).isEqualTo(1.0);
+            assertThat(decision.isAllowed()).isFalse();
+            assertThat(decision.reason()).isEqualTo(Reason.STORE_UNAVAILABLE);
+            assertThat(fallback.calls).isZero();
+            assertThat(registry.getSampleValue("ratelimit_store_failures_total")).isEqualTo(1.0);
+            assertThat(registry.getSampleValue("ratelimit_degraded")).isEqualTo(1.0);
+        }
     }
 
     @Test
     void noExceptionEscapes_whenBothStoresFail() {
         CollectorRegistry registry = new CollectorRegistry();
-        QuotaStore brokenLocal = (key, spec, now) -> {
+        QuotaStore brokenLocal = (_, _, _) -> {
             throw new IllegalStateException("local also down");
         };
-        ResilientQuotaStore store = new ResilientQuotaStore(new FailingPrimary(true), brokenLocal, FailurePolicy.DEGRADED_LOCAL, registry);
+        try (ResilientQuotaStore store = new ResilientQuotaStore(new FailingPrimary(true), brokenLocal, FailurePolicy.DEGRADED_LOCAL, registry)) {
 
-        assertThatCode(() -> {
-            Decision decision = store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
-            assertThat(decision.isAllowed()).isFalse();
-            assertThat(decision.reason()).isEqualTo(Reason.STORE_UNAVAILABLE);
-        }).doesNotThrowAnyException();
+            assertThatCode(() -> {
+                Decision decision = store.evaluateAndConsume(KEY, RateLimitSpec.perMinute(5), NOW);
+                assertThat(decision.isAllowed()).isFalse();
+                assertThat(decision.reason()).isEqualTo(Reason.STORE_UNAVAILABLE);
+            }).doesNotThrowAnyException();
+        }
     }
 
     @Test
     void close_delegatesToPrimary_whenAutoCloseable() {
         CollectorRegistry registry = new CollectorRegistry();
         ClosingPrimary primary = new ClosingPrimary();
-        try (ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {
+        try (var _ = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {
             assertThat(primary.closed).isFalse();
         }
         assertThat(primary.closed).isTrue();

@@ -68,7 +68,7 @@ public abstract class QuotaStoreContractTest {
         Decision rej = s.evaluateAndConsume(key("u"), spec, t0);
         assertThat(rej.isAllowed()).isFalse();
         assertThat(rej.reason()).isEqualTo(Reason.LIMIT_EXCEEDED);
-        assertThat(rej.remaining()).isEqualTo(0L);
+        assertThat(rej.remaining()).isZero();
         assertThat(rej.retryAfterSeconds()).isNotNull().isGreaterThan(0L);
         assertThat(rej.headers()).containsKey("Retry-After");
     }
