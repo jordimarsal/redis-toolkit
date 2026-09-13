@@ -10,9 +10,11 @@ class RateLimitSpecTest {
 
     @Test
     void r01_rejectsNonPositiveLimit() {
-        assertThatThrownBy(() -> RateLimitSpec.of(0, Duration.ofMinutes(1), 1))
+        Duration oneMinute = Duration.ofMinutes(1);
+        assertThatThrownBy(() -> RateLimitSpec.of(0, oneMinute, 1))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new RateLimitSpec(-5, Duration.ofSeconds(30), 1))
+        Duration thirtySeconds = Duration.ofSeconds(30);
+        assertThatThrownBy(() -> new RateLimitSpec(-5, thirtySeconds, 1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -23,8 +25,9 @@ class RateLimitSpecTest {
         assertThat(a.limit()).isEqualTo(10);
         assertThat(a.refillWindow()).isEqualTo(Duration.ofSeconds(30));
         assertThat(a.burst()).isEqualTo(20);
-        assertThat(a).isEqualTo(b);
-        assertThat(a.hashCode()).isEqualTo(b.hashCode());
+        assertThat(a)
+                .isEqualTo(b)
+                .hasSameHashCodeAs(b);
     }
 
     @Test

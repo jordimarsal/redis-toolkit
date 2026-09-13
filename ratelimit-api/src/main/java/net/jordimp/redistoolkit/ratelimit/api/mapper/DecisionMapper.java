@@ -7,7 +7,7 @@ import net.jordimp.redistoolkit.ratelimit.domain.Reason;
 
 public final class DecisionMapper {
 
-    public ApiResponse<?> toResponse(Decision decision, Object successBody) {
+    public ApiResponse<Object> toResponse(Decision decision, Object successBody) {
         if (decision.isAllowed()) {
             return new ApiResponse<>(200, decision.headers(), successBody);
         }

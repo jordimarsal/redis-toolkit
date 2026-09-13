@@ -45,7 +45,8 @@ class KeyExtractorTest {
 
     @Test
     void r3_rejectsOversizedValue() {
-        assertThatThrownBy(() -> extractor.extract(Dimension.IP, "x".repeat(129)))
+        String oversized = "x".repeat(129);
+        assertThatThrownBy(() -> extractor.extract(Dimension.IP, oversized))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maximum length");
     }

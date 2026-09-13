@@ -36,7 +36,8 @@ class QuotaKeyTest {
 
     @Test
     void rejectsValueLongerThan128Chars() {
-        assertThatThrownBy(() -> new QuotaKey("a".repeat(129), Dimension.IP))
+        String oversized = "a".repeat(129);
+        assertThatThrownBy(() -> new QuotaKey(oversized, Dimension.IP))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("maximum length");
     }
@@ -60,8 +61,9 @@ class QuotaKeyTest {
     @Test
     void r07_equalityRequiresValueAndDimension() {
         QuotaKey a = new QuotaKey("acme", Dimension.TENANT);
-        assertThat(a).isEqualTo(new QuotaKey("acme", Dimension.TENANT));
-        assertThat(a).isNotEqualTo(new QuotaKey("acme", Dimension.IP));
-        assertThat(a).isNotEqualTo(new QuotaKey("other", Dimension.TENANT));
+        assertThat(a)
+                .isEqualTo(new QuotaKey("acme", Dimension.TENANT))
+                .isNotEqualTo(new QuotaKey("acme", Dimension.IP))
+                .isNotEqualTo(new QuotaKey("other", Dimension.TENANT));
     }
 }
