@@ -72,7 +72,7 @@ class DedupKeyTest {
     @Test
     void equalsAndHashCodeAreValueBased() {
         assertThat(DedupKey.of("same")).isEqualTo(DedupKey.of("same"));
-        assertThat(DedupKey.of("same").hashCode()).isEqualTo(DedupKey.of("same").hashCode());
+        assertThat(DedupKey.of("same")).hasSameHashCodeAs(DedupKey.of("same"));
         assertThat(DedupKey.of("one")).isNotEqualTo(DedupKey.of("two"));
         assertThat(DedupKey.of("x")).isNotEqualTo("x");
     }

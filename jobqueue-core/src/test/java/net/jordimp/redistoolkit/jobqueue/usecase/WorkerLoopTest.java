@@ -14,13 +14,14 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.awaitility.Awaitility.await;
 
 class WorkerLoopTest {
 
@@ -34,7 +35,7 @@ class WorkerLoopTest {
             store.submit(Payload.of(new byte[]{(byte) i}), Priority.NORMAL, null);
         }
         WorkerLoop loop = new WorkerLoop(GROUP, store, metrics);
-        loop.setProcessor(job -> {
+        loop.setProcessor(_ -> {
         });
         int processed = loop.pollAndProcess(10);
         assertThat(processed).isEqualTo(3);
@@ -46,13 +47,13 @@ class WorkerLoopTest {
     void failedJobIsRecordedButNeverAcknowledged() {
         store.submit(Payload.of(new byte[]{1}), Priority.NORMAL, null);
         WorkerLoop loop = new WorkerLoop(GROUP, store, metrics);
-        loop.setProcessor(job -> {
+        loop.setProcessor(_ -> {
             throw new IllegalStateException("boom");
         });
         boolean threw = false;
         try {
             loop.pollAndProcess(10);
-        } catch (IllegalStateException expected) {
+        } catch (IllegalStateException _) {
             threw = true;
         }
         assertThat(threw).isTrue();
@@ -68,7 +69,7 @@ class WorkerLoopTest {
         WorkerLoop loop = new WorkerLoop(GROUP, store, metrics);
         AtomicInteger attempts = new AtomicInteger();
         AtomicInteger processed = new AtomicInteger();
-        Consumer<ClaimedJob> flaky = job -> {
+        Consumer<ClaimedJob> flaky = _ -> {
             if (attempts.incrementAndGet() <= 100) {
                 throw new IllegalStateException("boom");
             }
@@ -82,7 +83,7 @@ class WorkerLoopTest {
             for (int i = 0; i < 100; i++) {
                 try {
                     loop.pollAndProcess(1);
-                } catch (IllegalStateException expected) {
+                } catch (IllegalStateException _) {
                     // expected until the threshold trips
                 }
             }
@@ -108,19 +109,14 @@ class WorkerLoopTest {
     }
 
     @Test
-    void idleRunLoopBacksOffInsteadOfHotSpinningClaims() throws InterruptedException {
+    void idleRunLoopBacksOffInsteadOfHotSpinningClaims() {
         AtomicInteger claims = new AtomicInteger();
         QueueStore empty = countingEmptyStore(claims);
         WorkerLoop loop = new WorkerLoop(GROUP, empty, metrics);
-        loop.setProcessor(job -> {
+        loop.setProcessor(_ -> {
         });
         loop.start();
-        try {
-            Thread.sleep(450);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            fail("interrupted while observing the idle loop");
-        }
+        await().during(Duration.ofMillis(450)).until(() -> true);
         int observed = claims.get();
         loop.drainAndWait();
         // Without backoff this would be in the thousands over 450 ms; with exponential idle
@@ -148,6 +144,7 @@ class WorkerLoopTest {
 
             @Override
             public void acknowledge(String groupId, ClaimedJob claimed) {
+                // no-op: the idle-loop test never delivers, so there is nothing to acknowledge
             }
 
             @Override
@@ -167,6 +164,7 @@ class WorkerLoopTest {
 
             @Override
             public void close() {
+                // no-op: the idle-loop test owns no external resources to release
             }
         };
     }

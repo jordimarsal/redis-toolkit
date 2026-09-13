@@ -3,14 +3,18 @@ package net.jordimp.redistoolkit.jobqueue.usecase;
 import net.jordimp.redistoolkit.jobqueue.domain.ClaimedJob;
 import net.jordimp.redistoolkit.jobqueue.port.QueueStore;
 import net.jordimp.redistoolkit.jobqueue.port.Metrics;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 public final class WorkerLoop {
 
+    private static final Logger LOG = LoggerFactory.getLogger(WorkerLoop.class);
     private static final int DEFAULT_BATCH = 10;
     private static final int MAX_CONSECUTIVE_FAILURES = 100;
     /** Idle backoff bounds: an empty queue must not hammer the store with claims at full speed. */
@@ -24,7 +28,7 @@ public final class WorkerLoop {
     private final AtomicInteger consecutiveFailures = new AtomicInteger();
     private volatile boolean stoppedByFailures;
 
-    private volatile Consumer<ClaimedJob> processor;
+    private final AtomicReference<Consumer<ClaimedJob>> processor = new AtomicReference<>();
     private Thread thread;
 
     public WorkerLoop(String groupId, QueueStore store, Metrics metrics) {
@@ -34,7 +38,7 @@ public final class WorkerLoop {
     }
 
     public void setProcessor(Consumer<ClaimedJob> processor) {
-        this.processor = processor;
+        this.processor.set(processor);
     }
 
     public int pollAndProcess(int batchSize) {
@@ -46,7 +50,7 @@ public final class WorkerLoop {
             }
             ClaimedJob job = claimed.get();
             try {
-                processor.accept(job);
+                processor.get().accept(job);
                 metrics.delivered(groupId);
                 store.acknowledge(groupId, job);
                 consecutiveFailures.set(0);
@@ -55,8 +59,8 @@ public final class WorkerLoop {
                 metrics.failed(groupId);
                 if (consecutiveFailures.incrementAndGet() >= MAX_CONSECUTIVE_FAILURES && !stoppedByFailures) {
                     stoppedByFailures = true;
-                    System.err.println("[worker-" + groupId + "] stopping after " + MAX_CONSECUTIVE_FAILURES
-                            + " consecutive failures; unacknowledged jobs stay pending for redelivery");
+                    LOG.error("[worker-{}] stopping after {} consecutive failures; unacknowledged jobs stay pending for redelivery",
+                            groupId, MAX_CONSECUTIVE_FAILURES);
                 }
                 throw e;
             }
@@ -85,23 +89,23 @@ public final class WorkerLoop {
     private void runLoop() {
         long idleBackoffMs = IDLE_BACKOFF_BASE_MS;
         while (running.get()) {
-            int processed;
+            int processed = 0;
+            boolean fatal = false;
+            boolean failed = false;
             try {
                 processed = pollAndProcess(DEFAULT_BATCH);
-            } catch (RuntimeException e) {
-                if (stoppedByFailures) {
-                    break;
-                }
-                continue;
+            } catch (RuntimeException _) {
+                failed = true;
+                fatal = stoppedByFailures;
+            }
+            if (fatal || !running.get()) {
+                break;
             }
             if (processed > 0) {
                 idleBackoffMs = IDLE_BACKOFF_BASE_MS;
-            } else {
+            } else if (!failed) {
                 sleepQuietly(idleBackoffMs);
                 idleBackoffMs = Math.min(IDLE_BACKOFF_MAX_MS, idleBackoffMs * 2);
-            }
-            if (!running.get()) {
-                break;
             }
         }
         drain();
@@ -109,11 +113,11 @@ public final class WorkerLoop {
 
     private static void sleepQuietly(long millis) {
         try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+                Thread.sleep(millis);
+            } catch (InterruptedException _) {
+                Thread.currentThread().interrupt();
+            }
         }
-    }
 
     public void drainAndWait() {
         running.set(false);
@@ -121,14 +125,14 @@ public final class WorkerLoop {
         if (thread != null) {
             try {
                 thread.join();
-            } catch (InterruptedException e) {
+            } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }
         }
     }
 
     void drain() {
-        if (processor == null || stoppedByFailures) {
+        if (processor.get() == null || stoppedByFailures) {
             return;
         }
         pollAndProcess(DEFAULT_BATCH);

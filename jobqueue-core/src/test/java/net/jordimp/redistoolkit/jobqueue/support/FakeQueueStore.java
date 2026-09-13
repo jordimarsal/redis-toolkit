@@ -110,5 +110,6 @@ public final class FakeQueueStore implements QueueStore {
 
     @Override
     public void close() {
+        // In-memory fake holds no external resources, so there is nothing to release.
     }
 }
