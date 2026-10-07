@@ -1,5 +1,10 @@
 # redis-toolkit
 
+[![CI](https://github.com/jordimarsal/redis-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/jordimarsal/redis-toolkit/actions/workflows/ci.yml)
+[![Quality Gate](docs/images/badge-quality-gate.svg)](https://jordimarsal.github.io/redis-toolkit/)
+[![Coverage](docs/images/badge-coverage.svg)](https://jordimarsal.github.io/redis-toolkit/)
+[![Code Smells](docs/images/badge-code-smells.svg)](https://jordimarsal.github.io/redis-toolkit/)
+
 **A rate-limiting toolkit for LLM gateways.** It ships a small, dependency-free Java domain that
 enforces per-client quotas with atomic token-bucket accounting, plus a runnable Javalin gateway
 demo that exposes an OpenAI-style `POST /v1/completions` endpoint guarded by standard
@@ -9,6 +14,19 @@ The goal is not another production API gateway. It is a focused study in how to 
 rate limiter **correct under concurrency**, **pluggable across storage backends**, and
 **predictable on failure** — expressed as clean hexagonal boundaries, deterministic tests, and
 honest trade-off notes.
+
+## Quality
+
+Analyzed with SonarQube behind a custom quality gate ("Viatgecio Way") — current
+metrics, per-module coverage and the raw `redis-report.json` live on the
+[quality page](https://jordimarsal.github.io/redis-toolkit/), published on GitHub
+Pages. The badges above are static SVGs rendered from the latest scan report; the
+Sonar server itself is LAN-only, so dynamic badges would not resolve outside the
+homelab. After each scan, refresh the published assets with:
+
+```bash
+python3 scripts/sonar-quality.py   # reads ../redis-report.json, renders page + badges
+```
 
 ---
 

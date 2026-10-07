@@ -1,0 +1,79 @@
+{
+ "generatedAt": "2026-10-07T15:14:28+00:00",
+ "server": "https://sonar.viatgecio.test",
+ "project": {
+  "key": "jordimarsal:redis-toolkit",
+  "name": "jordimarsal:redis-toolkit",
+  "dashboard": "https://sonar.viatgecio.test/dashboard?id=jordimarsal%3Aredis-toolkit"
+ },
+ "qualityGate": {
+  "name": "Viatgecio Way",
+  "error": null,
+  "status": "OK",
+  "ignoredConditions": false,
+  "period": {
+   "mode": "PREVIOUS_VERSION",
+   "date": "2026-10-07T08:18:19+0000"
+  },
+  "caycStatus": "non-compliant",
+  "conditions": [
+   {
+    "metric": "new_duplicated_lines_density",
+    "comparator": "GT",
+    "threshold": "3",
+    "actual": "0.0",
+    "status": "OK"
+   },
+   {
+    "metric": "new_violations",
+    "comparator": "GT",
+    "threshold": "0",
+    "actual": "0",
+    "status": "OK"
+   }
+  ]
+ },
+ "measures": {
+  "complexity": 445,
+  "duplicated_lines_density": 0.0,
+  "duplicated_lines": 0,
+  "functions": 204,
+  "new_vulnerabilities": 0,
+  "classes": 44,
+  "new_coverage": 0.0,
+  "statements": 992,
+  "sqale_index": 0,
+  "sqale_rating": 1.0,
+  "bugs": 0,
+  "new_violations": 0,
+  "ncloc": 2841,
+  "new_maintainability_rating": 1.0,
+  "coverage": 67.2,
+  "reliability_rating": 1.0,
+  "code_smells": 0,
+  "security_rating": 1.0,
+  "violations": 0,
+  "comment_lines_density": 2.8,
+  "security_hotspots": 0,
+  "new_bugs": 0,
+  "new_code_smells": 0,
+  "new_security_hotspots": 0,
+  "comment_lines": 83,
+  "cognitive_complexity": 325,
+  "files": 51,
+  "vulnerabilities": 0,
+  "new_duplicated_lines_density": 0.0
+ },
+ "measuresError": null,
+ "issues": {
+  "total": 0,
+  "returned": 0,
+  "items": []
+ },
+ "issuesError": null,
+ "securityHotspots": {
+  "total": 0,
+  "items": []
+ },
+ "securityHotspotsError": null
+}
