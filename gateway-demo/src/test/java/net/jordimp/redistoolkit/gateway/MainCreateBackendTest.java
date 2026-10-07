@@ -10,19 +10,19 @@ import org.junit.jupiter.api.Test;
 class MainCreateBackendTest {
 
     @Test
-    void createBackend_stubIsDefault_whenTypeNotLlama() {
+    void createBackendStubIsDefaultWhenTypeNotLlama() {
         InferenceBackend backend = Main.createBackend("stub", null);
         assertThat(backend).isInstanceOf(StubBackend.class);
     }
 
     @Test
-    void createBackend_llamaWithoutTrustStore_usesDefaultTls() {
+    void createBackendLlamaWithoutTrustStoreUsesDefaultTls() {
         InferenceBackend backend = Main.createBackend("llama", "https://llama-tls:8443/v1");
         assertThat(backend).isNotNull();
     }
 
     @Test
-    void createBackend_rejectsMissingTrustStoreFile_failFast() {
+    void createBackendRejectsMissingTrustStoreFileFailFast() {
         assertThatThrownBy(() -> Main.createBackend("llama", "https://llama-tls:8443/v1", "/nonexistent/ca.p12"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("LLM_TRUSTSTORE");

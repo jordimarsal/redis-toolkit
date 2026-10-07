@@ -9,7 +9,7 @@ import redis.clients.jedis.exceptions.JedisException;
 class RedisQuotaStoreLifecycleTest {
 
     @Test
-    void close_closesUnderlyingJedisPool() {
+    void closeClosesUnderlyingJedisPool() {
         JedisPool pool = new JedisPool("localhost", 6379);
         RedisQuotaStore store = new RedisQuotaStore(pool);
         store.close();

@@ -10,7 +10,7 @@ class TokenBucketStateTest {
     private final Instant t0 = Instant.parse("2026-08-20T00:00:00Z");
 
     @Test
-    void r12_refillAddsElapsedRateCappedAtCapacity() {
+    void r12RefillAddsElapsedRateCappedAtCapacity() {
         TokenBucketState s = new TokenBucketState(5.0, t0);
         TokenBucketState after = s.refilled(t0.plusSeconds(10), 1.0, 10.0);
         assertThat(after.tokens()).isEqualTo(10.0);
@@ -22,14 +22,14 @@ class TokenBucketStateTest {
     }
 
     @Test
-    void r13_canConsumeReflectsAvailability() {
+    void r13CanConsumeReflectsAvailability() {
         TokenBucketState s = new TokenBucketState(3.0, t0);
         assertThat(s.canConsume(3)).isTrue();
         assertThat(s.canConsume(4)).isFalse();
     }
 
     @Test
-    void r14_consumeLeavesUnchangedWhenInsufficient() {
+    void r14ConsumeLeavesUnchangedWhenInsufficient() {
         TokenBucketState s = new TokenBucketState(2.0, t0);
         TokenBucketState unchanged = s.consume(5);
         assertThat(unchanged.tokens()).isEqualTo(2.0);

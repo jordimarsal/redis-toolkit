@@ -16,7 +16,7 @@ class LlamaServerUrlValidationTest {
     private final HttpClient client = HttpClient.newHttpClient();
 
     @Test
-    void accepts_absoluteHttpsUrlWithHost() {
+    void acceptsAbsoluteHttpsUrlWithHost() {
         assertThatCode(() -> new LlamaServerBackend(URI.create("https://llama.example.com:8443/v1"), client, json))
                 .doesNotThrowAnyException();
     }
@@ -35,7 +35,7 @@ class LlamaServerUrlValidationTest {
     }
 
     @Test
-    void rejects_nullBaseUrl() {
+    void rejectsNullBaseUrl() {
         assertThatThrownBy(() -> new LlamaServerBackend(null, client, json))
                 .isInstanceOf(NullPointerException.class);
     }

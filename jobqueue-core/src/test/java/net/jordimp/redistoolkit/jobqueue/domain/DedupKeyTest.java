@@ -8,24 +8,24 @@ import org.junit.jupiter.api.Test;
 class DedupKeyTest {
 
     @Test
-    void of_acceptsPrintableAsciiWithoutPipe() {
+    void ofAcceptsPrintableAsciiWithoutPipe() {
         DedupKey key = DedupKey.of("order-42");
         assertThat(key).isNotNull();
     }
 
     @Test
-    void raw_returnsTheOriginalValue() {
+    void rawReturnsTheOriginalValue() {
         assertThat(DedupKey.of("abc-123").raw()).isEqualTo("abc-123");
     }
 
     @Test
-    void of_rejectsNull() {
+    void ofRejectsNull() {
         assertThatThrownBy(() -> DedupKey.of(null))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
-    void of_rejectsEmptyAndBlank() {
+    void ofRejectsEmptyAndBlank() {
         assertThatThrownBy(() -> DedupKey.of(""))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("length");
@@ -34,7 +34,7 @@ class DedupKeyTest {
     }
 
     @Test
-    void of_rejectsLongerThan128Chars() {
+    void ofRejectsLongerThan128Chars() {
         String tooLong = "k".repeat(129);
         assertThatThrownBy(() -> DedupKey.of(tooLong))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -43,19 +43,19 @@ class DedupKeyTest {
     }
 
     @Test
-    void of_acceptsExactly128Chars() {
+    void ofAcceptsExactly128Chars() {
         assertThat(DedupKey.of("k".repeat(128))).isNotNull();
     }
 
     @Test
-    void of_rejectsPipeCharacter() {
+    void ofRejectsPipeCharacter() {
         assertThatThrownBy(() -> DedupKey.of("a|b"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("|");
     }
 
     @Test
-    void of_rejectsControlCharacters() {
+    void ofRejectsControlCharacters() {
         assertThatThrownBy(() -> DedupKey.of("a\nb"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("control");
@@ -64,7 +64,7 @@ class DedupKeyTest {
     }
 
     @Test
-    void of_rejectsNonAsciiBytes() {
+    void ofRejectsNonAsciiBytes() {
         assertThatThrownBy(() -> DedupKey.of("café"))
                 .isInstanceOf(IllegalArgumentException.class);
     }

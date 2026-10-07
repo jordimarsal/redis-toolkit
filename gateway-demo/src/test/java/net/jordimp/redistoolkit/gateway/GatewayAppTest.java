@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -68,7 +69,7 @@ class GatewayAppTest {
     }
 
     @Test
-    void underLimit_returns200_completionAndHeaders() throws Exception {
+    void underLimitReturns200CompletionAndHeaders() throws Exception {
         HttpResponse<String> resp = post("{\"model\":\"stub\",\"prompt\":\"hello\"}");
         assertThat(resp.statusCode()).isEqualTo(200);
         assertThat(resp.headers().firstValue("X-RateLimit-Limit")).contains("3");
@@ -78,7 +79,7 @@ class GatewayAppTest {
     }
 
     @Test
-    void overLimit_returns429_withPositiveRetryAfter() throws Exception {
+    void overLimitReturns429WithPositiveRetryAfter() throws Exception {
         List<Integer> statuses = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
             HttpResponse<String> resp = post("{\"model\":\"stub\",\"prompt\":\"x\"}");
@@ -97,21 +98,21 @@ class GatewayAppTest {
     }
 
     @Test
-    void invalidJsonBody_returns400_badRequest() throws Exception {
+    void invalidJsonBodyReturns400BadRequest() throws Exception {
         HttpResponse<String> resp = post("{this is not valid json");
         assertThat(resp.statusCode()).isEqualTo(400);
         assertThat(resp.body()).contains("bad_request");
     }
 
     @Test
-    void emptyBody_usesDefaultRequest_andServesStub() throws Exception {
+    void emptyBodyUsesDefaultRequestAndServesStub() throws Exception {
         HttpResponse<String> resp = post("");
         assertThat(resp.statusCode()).isEqualTo(200);
         assertThat(resp.body()).contains("Stub completion for");
     }
 
     @Test
-    void oversizedPrompt_returns413_payloadTooLarge() throws Exception {
+    void oversizedPromptReturns413PayloadTooLarge() throws Exception {
         String bigPrompt = "a".repeat(5_000); // above the 4096-char prompt cap, below the body cap
         HttpResponse<String> resp = post("{\"model\":\"stub\",\"prompt\":\"" + bigPrompt + "\"}");
         assertThat(resp.statusCode()).isEqualTo(413);
@@ -119,7 +120,7 @@ class GatewayAppTest {
     }
 
     @Test
-    void oversizedModel_returns413_payloadTooLarge() throws Exception {
+    void oversizedModelReturns413PayloadTooLarge() throws Exception {
         String bigModel = "m".repeat(200); // above the 128-char model cap
         HttpResponse<String> resp = post("{\"model\":\"" + bigModel + "\",\"prompt\":\"hi\"}");
         assertThat(resp.statusCode()).isEqualTo(413);
@@ -127,7 +128,7 @@ class GatewayAppTest {
     }
 
     @Test
-    void oversizedRawBody_returns413_evenIfFieldsAreSmall() throws Exception {
+    void oversizedRawBodyReturns413EvenIfFieldsAreSmall() throws Exception {
         // Valid JSON with tiny fields but a raw body over the 8 KiB Content-Length cap.
         String padded = "{\"model\":\"stub\",\"prompt\":\"hi\"" + " ".repeat(9 * 1024) + "}";
         HttpResponse<String> resp = post(padded);
@@ -136,7 +137,7 @@ class GatewayAppTest {
     }
 
     @Test
-    void chunkedOversizedBody_returns413_payloadTooLarge() throws Exception {
+    void chunkedOversizedBodyReturns413PayloadTooLarge() throws Exception {
         // No Content-Length header: Transfer-Encoding: chunked must not bypass the raw body cap.
         String padded = "{\"model\":\"stub\",\"prompt\":\"hi\"" + " ".repeat(9 * 1024) + "}";
         HttpResponse<String> resp = postStream(padded);
@@ -145,14 +146,14 @@ class GatewayAppTest {
     }
 
     @Test
-    void chunkedValidBody_returns200_completion() throws Exception {
+    void chunkedValidBodyReturns200Completion() throws Exception {
         HttpResponse<String> resp = postStream("{\"model\":\"stub\",\"prompt\":\"chunked\"}");
         assertThat(resp.statusCode()).isEqualTo(200);
         assertThat(resp.body()).contains("Stub completion for").contains("chunked");
     }
 
     @Test
-    void responses_includeNosniffSecurityHeader() throws Exception {
+    void responsesIncludeNosniffSecurityHeader() throws Exception {
         HttpResponse<String> ok = post("{\"model\":\"stub\",\"prompt\":\"hi\"}");
         assertThat(ok.headers().firstValue("X-Content-Type-Options")).contains("nosniff");
         HttpResponse<String> bad = post("{this is not valid json");
@@ -161,7 +162,7 @@ class GatewayAppTest {
     }
 
     @Test
-    void oversizedClientIdentifier_returns400_invalidClientId() throws Exception {
+    void oversizedClientIdentifierReturns400InvalidClientId() throws Exception {
         javalin.stop();
         GatewayApp app = buildGateway();
         app.setClientIdHeader("X-Client");
@@ -176,7 +177,7 @@ class GatewayAppTest {
     }
 
     @Test
-    void distinctClientIdentifiers_getIndependentBudgets_whenHeaderConfigured() throws Exception {
+    void distinctClientIdentifiersGetIndependentBudgetsWhenHeaderConfigured() throws Exception {
         javalin.stop();
         GatewayApp app = buildGateway();
         app.setClientIdHeader("X-Client");
@@ -194,11 +195,12 @@ class GatewayAppTest {
         }
     }
 
-    private HttpResponse<String> post(String body) throws Exception {
+    private HttpResponse<String> post(String body) throws IOException, InterruptedException {
         return postTo(port, body, null);
     }
 
-    private HttpResponse<String> postTo(int targetPort, String body, String clientId) throws Exception {
+    private HttpResponse<String> postTo(int targetPort, String body, String clientId)
+            throws IOException, InterruptedException {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + targetPort + ROUTE))
                 .header("Content-Type", "application/json")
@@ -209,7 +211,7 @@ class GatewayAppTest {
         return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private HttpResponse<String> postStream(String body) throws Exception {
+    private HttpResponse<String> postStream(String body) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + ROUTE))
                 .header("Content-Type", "application/json")

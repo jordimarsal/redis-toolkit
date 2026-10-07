@@ -12,7 +12,7 @@ class ReadmeSectionsTest {
     private static final Path README = Path.of("..", "README.md");
 
     @Test
-    void readme_containsAllRequiredHeadings() throws IOException {
+    void readmeContainsAllRequiredHeadings() throws IOException {
         assertThat(README).as("missing %s", README.toAbsolutePath()).exists();
         String content = Files.readString(README);
 

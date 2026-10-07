@@ -13,19 +13,19 @@ class RateLimitRegistryTest {
     private final RateLimitRegistry registry = new RateLimitRegistry(Map.of("/v1/completions", spec));
 
     @Test
-    void r4_returnsRegisteredSpec() {
+    void r4ReturnsRegisteredSpec() {
         Optional<RateLimitSpec> found = registry.find("/v1/completions");
 
         assertThat(found).contains(spec);
     }
 
     @Test
-    void r5_signalsAbsenceWhenUnregistered() {
+    void r5SignalsAbsenceWhenUnregistered() {
         assertThat(registry.find("/unknown")).isEmpty();
     }
 
     @Test
-    void r5_nullRouteSignalsAbsence() {
+    void r5NullRouteSignalsAbsence() {
         assertThat(registry.find(null)).isEmpty();
     }
 }

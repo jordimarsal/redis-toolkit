@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.prometheus.client.CollectorRegistry;
+import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Instant;
 import net.jordimp.redistoolkit.gateway.backend.InferenceBackend;
@@ -20,10 +21,10 @@ import org.junit.jupiter.api.Test;
 class MainWiringTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
-    private static final QuotaKey KEY = new QuotaKey("1.2.3.4", Dimension.IP);
+    private static final QuotaKey KEY = new QuotaKey("localhost", Dimension.IP);
 
     @Test
-    void withoutRedisHost_usesPlainInMemoryStore_andNoResource() {
+    void withoutRedisHostUsesPlainInMemoryStoreAndNoResource() {
         Main.StoreWiring wiring = Main.createStoreWiring(null, 6379, new CollectorRegistry());
 
         assertThat(wiring.store()).isInstanceOf(InMemoryQuotaStore.class);
@@ -31,7 +32,7 @@ class MainWiringTest {
     }
 
     @Test
-    void blankRedisHost_usesPlainInMemoryStore_andNoResource() {
+    void blankRedisHostUsesPlainInMemoryStoreAndNoResource() {
         Main.StoreWiring wiring = Main.createStoreWiring("   ", 6379, new CollectorRegistry());
 
         assertThat(wiring.store()).isInstanceOf(InMemoryQuotaStore.class);
@@ -39,7 +40,7 @@ class MainWiringTest {
     }
 
     @Test
-    void withRedisHost_wrapsResilientStore_servingFromLocalFallback_whenRedisDown() throws Exception {
+    void withRedisHostWrapsResilientStoreServingFromLocalFallbackWhenRedisDown() throws Exception {
         int closedPort = firstClosedPort();
         CollectorRegistry registry = new CollectorRegistry();
         Main.StoreWiring wiring = Main.createStoreWiring("localhost", closedPort, registry);
@@ -58,21 +59,21 @@ class MainWiringTest {
     }
 
     @Test
-    void createBackend_defaultsToStub_whenTypeNullBlankOrUnknown() {
+    void createBackendDefaultsToStubWhenTypeNullBlankOrUnknown() {
         assertThat(Main.createBackend(null, null)).isInstanceOf(StubBackend.class);
         assertThat(Main.createBackend("   ", "http://ignored")).isInstanceOf(StubBackend.class);
         assertThat(Main.createBackend("stub", "http://ignored")).isInstanceOf(StubBackend.class);
     }
 
     @Test
-    void createBackend_returnsLlamaBackend_whenTypeIsLlamaWithHttpsUrl() {
+    void createBackendReturnsLlamaBackendWhenTypeIsLlamaWithHttpsUrl() {
         InferenceBackend backend = Main.createBackend("llama", "https://llama-tls:8443/v1");
 
         assertThat(backend).isInstanceOf(LlamaServerBackend.class);
     }
 
     @Test
-    void createBackend_throwsIllegalArgument_whenLlamaWithoutBaseUrl() {
+    void createBackendThrowsIllegalArgumentWhenLlamaWithoutBaseUrl() {
         assertThatThrownBy(() -> Main.createBackend("llama", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("LLM_BASE_URL");
@@ -82,20 +83,20 @@ class MainWiringTest {
     }
 
     @Test
-    void createBackend_throwsIllegalArgument_whenLlamaUrlIsNotHttps() {
+    void createBackendThrowsIllegalArgumentWhenLlamaUrlIsNotHttps() {
         assertThatThrownBy(() -> Main.createBackend("llama", "http://localhost:8080/v1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("https");
     }
 
     @Test
-    void createBackend_throwsIllegalArgument_whenLlamaUrlIsMalformed() {
+    void createBackendThrowsIllegalArgumentWhenLlamaUrlIsMalformed() {
         assertThatThrownBy(() -> Main.createBackend("llama", "ht!tp://bad url"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("LLM_BASE_URL");
     }
 
-    private static int firstClosedPort() throws Exception {
+    private static int firstClosedPort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
             return socket.getLocalPort();
         }

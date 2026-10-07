@@ -44,7 +44,7 @@ class RateLimiterServiceTest {
     }
 
     @Test
-    void r15_r16_delegatesWithInjectedTimeAndReturnsDecisionUnchanged() {
+    void r15R16DelegatesWithInjectedTimeAndReturnsDecisionUnchanged() {
         RecordingStore store = new RecordingStore();
         RateLimiterService service = new RateLimiterService(new FixedClock(fixed), store);
         QuotaKey key = new QuotaKey("acme", Dimension.TENANT);

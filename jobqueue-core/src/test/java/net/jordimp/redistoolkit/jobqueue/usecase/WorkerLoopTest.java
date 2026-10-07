@@ -1,5 +1,8 @@
 package net.jordimp.redistoolkit.jobqueue.usecase;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import net.jordimp.redistoolkit.jobqueue.domain.ClaimedJob;
 import net.jordimp.redistoolkit.jobqueue.domain.DedupKey;
 import net.jordimp.redistoolkit.jobqueue.domain.Payload;
@@ -10,10 +13,8 @@ import net.jordimp.redistoolkit.jobqueue.port.SubmitResult;
 import net.jordimp.redistoolkit.jobqueue.support.FakeQueueStore;
 import net.jordimp.redistoolkit.jobqueue.support.RecordingMetrics;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -62,7 +63,7 @@ class WorkerLoopTest {
     }
 
     @Test
-    void failureStormStopsTheLoop_visiblyAndSkipsFinalDrain() {
+    void failureStormStopsTheLoopVisiblyAndSkipsFinalDrain() {
         for (int i = 0; i < 101; i++) {
             store.submit(Payload.of(new byte[]{(byte) i}), Priority.NORMAL, null);
         }
@@ -76,9 +77,10 @@ class WorkerLoopTest {
             processed.incrementAndGet();
         };
         loop.setProcessor(flaky);
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        PrintStream originalErr = System.err;
-        System.setErr(new PrintStream(err, true));
+        Logger workerLog = (Logger) LoggerFactory.getLogger(WorkerLoop.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        workerLog.addAppender(appender);
         try {
             for (int i = 0; i < 100; i++) {
                 try {
@@ -88,10 +90,12 @@ class WorkerLoopTest {
                 }
             }
         } finally {
-            System.setErr(originalErr);
+            workerLog.detachAppender(appender);
         }
         assertThat(loop.isStoppedByFailures()).as("loop must be observably stopped").isTrue();
-        assertThat(err.toString(StandardCharsets.UTF_8)).contains("consecutive failures");
+        assertThat(appender.list)
+                .as("the operator must see the reason in the logs")
+                .anyMatch(event -> event.getFormattedMessage().contains("consecutive failures"));
         loop.drain();
         assertThat(processed.get()).as("drain must be skipped after a failure storm").isZero();
     }

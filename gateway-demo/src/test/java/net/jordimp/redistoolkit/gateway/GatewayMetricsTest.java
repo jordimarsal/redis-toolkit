@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javalin.Javalin;
 import io.prometheus.client.CollectorRegistry;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -67,7 +68,7 @@ class GatewayMetricsTest {
     }
 
     @Test
-    void metricsEndpoint_exposesDecisionCounters_afterAllowedAndDeniedRequests() throws Exception {
+    void metricsEndpointExposesDecisionCountersAfterAllowedAndDeniedRequests() throws Exception {
         assertThat(post(port, "{\"model\":\"stub\",\"prompt\":\"a\"}").statusCode()).isEqualTo(200);
         assertThat(post(port, "{\"model\":\"stub\",\"prompt\":\"b\"}").statusCode()).isEqualTo(429);
 
@@ -80,7 +81,7 @@ class GatewayMetricsTest {
     }
 
     @Test
-    void metricsEndpoint_exposesStoreFailureAndDegradedMetrics_whenPrimaryFails() throws Exception {
+    void metricsEndpointExposesStoreFailureAndDegradedMetricsWhenPrimaryFails() throws Exception {
         CollectorRegistry registry = new CollectorRegistry();
         ResilientQuotaStore store = new ResilientQuotaStore(failingPrimary(), new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry);
         Clock clock = () -> T0;
@@ -115,7 +116,7 @@ class GatewayMetricsTest {
     }
 
     @Test
-    void metricsEndpoint_rejectsProxiedRequests_evenWhenTcpPeerIsLoopback() throws Exception {
+    void metricsEndpointRejectsProxiedRequestsEvenWhenTcpPeerIsLoopback() throws Exception {
         // Behind a reverse proxy every external client arrives from loopback; forwarding headers
         // mark such requests so the loopback check cannot be bypassed by topology alone.
         HttpResponse<String> viaXff = http.send(HttpRequest.newBuilder()
@@ -161,7 +162,7 @@ class GatewayMetricsTest {
         return null;
     }
 
-    private HttpResponse<String> post(int port, String body) throws Exception {
+    private HttpResponse<String> post(int port, String body) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + ROUTE))
                 .header("Content-Type", "application/json")
@@ -170,7 +171,7 @@ class GatewayMetricsTest {
         return http.send(req, HttpResponse.BodyHandlers.ofString());
     }
 
-    private HttpResponse<String> getMetrics(int port) throws Exception {
+    private HttpResponse<String> getMetrics(int port) throws IOException, InterruptedException {
         HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create("http://localhost:" + port + "/metrics"))
                 .GET()

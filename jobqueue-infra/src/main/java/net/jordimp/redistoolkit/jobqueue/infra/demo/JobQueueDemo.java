@@ -33,6 +33,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class JobQueueDemo {
 
+    private JobQueueDemo() {
+        // static entry point only
+    }
+
     private static final Logger LOG = LoggerFactory.getLogger(JobQueueDemo.class);
     private static final String GROUP = "demo-group";
     private static final int REDIS_SOCKET_TIMEOUT_MS = 10_000;
@@ -42,7 +46,7 @@ public final class JobQueueDemo {
     private static final long REDIS_MIN_EVICTABLE_IDLE_MS = 300_000L; // 5 minutes
     private static final long REDIS_EVICTION_RUN_INTERVAL_MS = 30_000L; // evictor sweep every 30 s
 
-    static void main() {
+    public static void main(String[] args) {
         QueueStore store = createStore();
         InMemoryMetrics metrics = new InMemoryMetrics();
         WorkerLoop worker = new WorkerLoop(GROUP, store, metrics);

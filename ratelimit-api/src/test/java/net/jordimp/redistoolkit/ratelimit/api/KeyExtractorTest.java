@@ -14,7 +14,7 @@ class KeyExtractorTest {
     private final KeyExtractor extractor = new KeyExtractor();
 
     @Test
-    void r2_mapsTenantDimensionToQuotaKey() {
+    void r2MapsTenantDimensionToQuotaKey() {
         QuotaKey key = extractor.extract(Dimension.TENANT, "acme");
 
         assertThat(key).isEqualTo(new QuotaKey("acme", Dimension.TENANT));
@@ -23,7 +23,7 @@ class KeyExtractorTest {
 
     @ParameterizedTest
     @EnumSource(Dimension.class)
-    void r2_buildsKeyForEveryDimension(Dimension dimension) {
+    void r2BuildsKeyForEveryDimension(Dimension dimension) {
         QuotaKey key = extractor.extract(dimension, "v1");
 
         assertThat(key.value()).isEqualTo("v1");
@@ -31,20 +31,20 @@ class KeyExtractorTest {
     }
 
     @Test
-    void r3_rejectsNullValue() {
+    void r3RejectsNullValue() {
         assertThatThrownBy(() -> extractor.extract(Dimension.IP, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("non-blank");
     }
 
     @Test
-    void r3_rejectsBlankValue() {
+    void r3RejectsBlankValue() {
         assertThatThrownBy(() -> extractor.extract(Dimension.MODEL, "   "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void r3_rejectsOversizedValue() {
+    void r3RejectsOversizedValue() {
         String oversized = "x".repeat(129);
         assertThatThrownBy(() -> extractor.extract(Dimension.IP, oversized))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -52,7 +52,7 @@ class KeyExtractorTest {
     }
 
     @Test
-    void r3_rejectsControlCharactersInValue() {
+    void r3RejectsControlCharactersInValue() {
         assertThatThrownBy(() -> extractor.extract(Dimension.TENANT, "a\0b"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("control characters");

@@ -16,7 +16,7 @@ class ApiResponseTest {
     };
 
     @Test
-    void r9_exposesNoDomainTypesOnPublicSurface() {
+    void r9ExposesNoDomainTypesOnPublicSurface() {
         for (Field field : ApiResponse.class.getDeclaredFields()) {
             boolean leaks = false;
             for (Class<?> domainType : DOMAIN_TYPES) {

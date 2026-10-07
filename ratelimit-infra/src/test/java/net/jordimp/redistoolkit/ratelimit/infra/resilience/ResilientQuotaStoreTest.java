@@ -19,10 +19,10 @@ import redis.clients.jedis.exceptions.JedisConnectionException;
 class ResilientQuotaStoreTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
-    private static final QuotaKey KEY = new QuotaKey("1.2.3.4", Dimension.IP);
+    private static final QuotaKey KEY = new QuotaKey("localhost", Dimension.IP);
 
     @Test
-    void degradedLocal_returnsFallbackDecision_whenPrimaryFails() {
+    void degradedLocalReturnsFallbackDecisionWhenPrimaryFails() {
         CollectorRegistry registry = new CollectorRegistry();
         FailingPrimary primary = new FailingPrimary(true);
         try (ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {
@@ -37,7 +37,7 @@ class ResilientQuotaStoreTest {
     }
 
     @Test
-    void degradedLocal_admitsWithinLocalBudget_thenLimitsExceededWhenExhausted() {
+    void degradedLocalAdmitsWithinLocalBudgetThenLimitsExceededWhenExhausted() {
         CollectorRegistry registry = new CollectorRegistry();
         FailingPrimary primary = new FailingPrimary(true);
         try (ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {
@@ -56,7 +56,7 @@ class ResilientQuotaStoreTest {
     }
 
     @Test
-    void recovery_resetsDegradedGauge_whenPrimarySucceedsAgain() {
+    void recoveryResetsDegradedGaugeWhenPrimarySucceedsAgain() {
         CollectorRegistry registry = new CollectorRegistry();
         FailingPrimary primary = new FailingPrimary(true);
         try (ResilientQuotaStore store = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {
@@ -74,7 +74,7 @@ class ResilientQuotaStoreTest {
     }
 
     @Test
-    void failClosed_rejectsStoreUnavailable_withoutConsultingFallback() {
+    void failClosedRejectsStoreUnavailableWithoutConsultingFallback() {
         CollectorRegistry registry = new CollectorRegistry();
         FailingPrimary primary = new FailingPrimary(true);
         RecordingFallback fallback = new RecordingFallback();
@@ -91,7 +91,7 @@ class ResilientQuotaStoreTest {
     }
 
     @Test
-    void noExceptionEscapes_whenBothStoresFail() {
+    void noExceptionEscapesWhenBothStoresFail() {
         CollectorRegistry registry = new CollectorRegistry();
         QuotaStore brokenLocal = (_, _, _) -> {
             throw new IllegalStateException("local also down");
@@ -107,7 +107,7 @@ class ResilientQuotaStoreTest {
     }
 
     @Test
-    void close_delegatesToPrimary_whenAutoCloseable() {
+    void closeDelegatesToPrimaryWhenAutoCloseable() {
         CollectorRegistry registry = new CollectorRegistry();
         ClosingPrimary primary = new ClosingPrimary();
         try (var _ = new ResilientQuotaStore(primary, new InMemoryQuotaStore(), FailurePolicy.DEGRADED_LOCAL, registry)) {

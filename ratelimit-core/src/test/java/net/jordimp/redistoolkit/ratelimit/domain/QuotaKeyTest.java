@@ -3,12 +3,14 @@ package net.jordimp.redistoolkit.ratelimit.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.net.InetAddress;
+
 import org.junit.jupiter.api.Test;
 
 class QuotaKeyTest {
 
     @Test
-    void r04_rejectsBlankValue() {
+    void r04RejectsBlankValue() {
         assertThatThrownBy(() -> new QuotaKey(null, Dimension.TENANT))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new QuotaKey("", Dimension.IP))
@@ -18,15 +20,16 @@ class QuotaKeyTest {
     }
 
     @Test
-    void r05_renderFormat() {
+    void r05RenderFormat() {
         assertThat(new QuotaKey("acme", Dimension.TENANT).render())
                 .isEqualTo("ratelimit:tenant:acme");
-        assertThat(new QuotaKey("10.0.0.1", Dimension.IP).render())
-                .isEqualTo("ratelimit:ip:10.0.0.1");
+        String loopback = InetAddress.getLoopbackAddress().getHostAddress();
+        assertThat(new QuotaKey(loopback, Dimension.IP).render())
+                .isEqualTo("ratelimit:ip:" + loopback);
     }
 
     @Test
-    void r06_withDimensionChangesOnlyDimension() {
+    void r06WithDimensionChangesOnlyDimension() {
         QuotaKey original = new QuotaKey("acme", Dimension.TENANT);
         QuotaKey changed = original.withDimension(Dimension.MODEL);
         assertThat(changed.dimension()).isEqualTo(Dimension.MODEL);
@@ -59,7 +62,7 @@ class QuotaKeyTest {
     }
 
     @Test
-    void r07_equalityRequiresValueAndDimension() {
+    void r07EqualityRequiresValueAndDimension() {
         QuotaKey a = new QuotaKey("acme", Dimension.TENANT);
         assertThat(a)
                 .isEqualTo(new QuotaKey("acme", Dimension.TENANT))

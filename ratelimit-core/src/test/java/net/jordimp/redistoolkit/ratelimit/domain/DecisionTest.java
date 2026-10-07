@@ -13,7 +13,7 @@ class DecisionTest {
             Decision.rejected(Reason.LIMIT_EXCEEDED, 10, Duration.ofSeconds(45));
 
     @Test
-    void r08_exposesValuesAndIsAllowed() {
+    void r08ExposesValuesAndIsAllowed() {
         assertThat(ok.isAllowed()).isTrue();
         assertThat(ok.remaining()).isEqualTo(5);
         assertThat(ok.limit()).isEqualTo(10);
@@ -23,18 +23,18 @@ class DecisionTest {
     }
 
     @Test
-    void r09_includesRetryAfterWhenPositive() {
+    void r09IncludesRetryAfterWhenPositive() {
         Map<String, String> headers = rejected.headers();
         assertThat(headers).containsEntry("Retry-After", "45");
     }
 
     @Test
-    void r10_omitsRetryAfterWhenAbsent() {
+    void r10OmitsRetryAfterWhenAbsent() {
         assertThat(ok.headers()).doesNotContainKey("Retry-After");
     }
 
     @Test
-    void r11_alwaysIncludesRateLimitHeaders() {
+    void r11AlwaysIncludesRateLimitHeaders() {
         for (Decision d : new Decision[] { ok, rejected }) {
             Map<String, String> h = d.headers();
             assertThat(h)

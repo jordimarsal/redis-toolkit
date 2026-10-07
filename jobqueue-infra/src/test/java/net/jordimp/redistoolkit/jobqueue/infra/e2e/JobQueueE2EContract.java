@@ -118,7 +118,7 @@ public abstract class JobQueueE2EContract {
         for (int i = 0; i < total; i++) {
             // Distinct past timestamps so every delayed job is a separate entry in any store (an in-memory
             // TreeMap keyed by runAt would otherwise collapse jobs sharing the same millisecond).
-            store.submitDelayed(payload("j" + i), Priority.NORMAL, null, Instant.now().minusSeconds(total - i));
+            store.submitDelayed(payload("j" + i), Priority.NORMAL, null, Instant.now().minusSeconds((long) total - i));
         }
         ExecutorService exec = Executors.newFixedThreadPool(4);
         try {

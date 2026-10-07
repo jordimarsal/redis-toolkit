@@ -22,7 +22,7 @@ class ComposeFileTest {
     }
 
     @Test
-    void definesRedisAndGatewayServices_withRequiredWiring() throws Exception {
+    void definesRedisAndGatewayServicesWithRequiredWiring() throws Exception {
         Map<String, Object> doc = compose();
         Map<String, Object> services = asMap(doc.get("services"));
 

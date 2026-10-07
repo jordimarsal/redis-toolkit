@@ -84,7 +84,7 @@ public final class BenchmarkRunner {
         return sorted.get(Math.clamp(idx, 0, sorted.size() - 1));
     }
 
-    static void main(String[] args) {
+    public static void main(String[] args) {
         if (args.length < 1 || args[0].isBlank()) {
             LOG.error("usage: BenchmarkRunner <base-url> [n]");
             System.exit(2);

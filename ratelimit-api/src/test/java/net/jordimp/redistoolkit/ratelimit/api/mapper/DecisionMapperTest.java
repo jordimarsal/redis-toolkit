@@ -13,7 +13,7 @@ class DecisionMapperTest {
     private final DecisionMapper mapper = new DecisionMapper();
 
     @Test
-    void r6_allowedMapsTo200WithHeadersAndBody() {
+    void r6AllowedMapsTo200WithHeadersAndBody() {
         Decision decision = Decision.ok(9L, 10L);
 
         ApiResponse<?> response = mapper.toResponse(decision, "hello");
@@ -27,7 +27,7 @@ class DecisionMapperTest {
     }
 
     @Test
-    void r7_limitExceededMapsTo429WithRetryAfter() {
+    void r7LimitExceededMapsTo429WithRetryAfter() {
         Decision decision = Decision.rejected(Reason.LIMIT_EXCEEDED, 10L, Duration.ofSeconds(3));
 
         ApiResponse<?> response = mapper.toResponse(decision, null);
@@ -39,14 +39,14 @@ class DecisionMapperTest {
     }
 
     @Test
-    void r8_storeUnavailableMapsTo503DistinctFrom429() {
+    void r8StoreUnavailableMapsTo503DistinctFrom429() {
         Decision decision = Decision.rejected(Reason.STORE_UNAVAILABLE, 10L, null);
 
         assertThat(mapper.toResponse(decision, null).status()).isEqualTo(503);
     }
 
     @Test
-    void r8_configErrorMapsTo500DistinctFrom429() {
+    void r8ConfigErrorMapsTo500DistinctFrom429() {
         Decision decision = Decision.rejected(Reason.CONFIG_ERROR, 10L, null);
 
         assertThat(mapper.toResponse(decision, null).status()).isEqualTo(500);

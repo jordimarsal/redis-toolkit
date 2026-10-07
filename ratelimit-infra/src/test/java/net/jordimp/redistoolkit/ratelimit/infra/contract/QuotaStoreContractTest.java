@@ -36,7 +36,7 @@ public abstract class QuotaStoreContractTest {
     }
 
     @Test
-    public void r2_freshStoreAdmitsUpToBurstThenRejects() {
+    public void r2FreshStoreAdmitsUpToBurstThenRejects() {
         RateLimitSpec spec = new RateLimitSpec(1, Duration.ofSeconds(60), 5);
         QuotaStore s = store();
         for (int i = 1; i <= 5; i++) {
@@ -47,7 +47,7 @@ public abstract class QuotaStoreContractTest {
     }
 
     @Test
-    public void r3_admissionReportsRemainingLimitAndHeaders() {
+    public void r3AdmissionReportsRemainingLimitAndHeaders() {
         RateLimitSpec spec = new RateLimitSpec(10, Duration.ofSeconds(60), 10);
         Decision d = store().evaluateAndConsume(key("u"), spec, t0);
         assertThat(d.isAllowed()).isTrue();
@@ -61,7 +61,7 @@ public abstract class QuotaStoreContractTest {
     }
 
     @Test
-    public void r4_rejectionCarriesPositiveRetryAfterAndReason() {
+    public void r4RejectionCarriesPositiveRetryAfterAndReason() {
         RateLimitSpec spec = new RateLimitSpec(1, Duration.ofSeconds(60), 1);
         QuotaStore s = store();
         assertThat(s.evaluateAndConsume(key("u"), spec, t0).isAllowed()).isTrue();
@@ -74,7 +74,7 @@ public abstract class QuotaStoreContractTest {
     }
 
     @Test
-    public void r5_refillReAdmitsExhaustedKeyAfterWindow() {
+    public void r5RefillReAdmitsExhaustedKeyAfterWindow() {
         RateLimitSpec spec = new RateLimitSpec(2, Duration.ofSeconds(60), 2);
         QuotaStore s = store();
         assertThat(s.evaluateAndConsume(key("u"), spec, t0).isAllowed()).isTrue();
@@ -85,7 +85,7 @@ public abstract class QuotaStoreContractTest {
     }
 
     @Test
-    public void r6_distinctKeysAreIndependent() {
+    public void r6DistinctKeysAreIndependent() {
         RateLimitSpec spec = new RateLimitSpec(1, Duration.ofSeconds(60), 1);
         QuotaStore s = store();
         assertThat(s.evaluateAndConsume(key("A"), spec, t0).isAllowed()).isTrue();
@@ -94,7 +94,7 @@ public abstract class QuotaStoreContractTest {
     }
 
     @Test
-    public void r7_concurrentAdmitsExactlyTheLimit() throws Exception {
+    public void r7ConcurrentAdmitsExactlyTheLimit() throws Exception {
         int limit = 10;
         int attempts = 100;
         RateLimitSpec spec = new RateLimitSpec(limit, Duration.ofSeconds(60), limit);
@@ -120,7 +120,7 @@ public abstract class QuotaStoreContractTest {
     }
 
     @Test
-    public void r8_identicalInputsProduceIdenticalDecisions() {
+    public void r8IdenticalInputsProduceIdenticalDecisions() {
         RateLimitSpec spec = new RateLimitSpec(5, Duration.ofSeconds(60), 5);
         Decision a = store().evaluateAndConsume(key("X"), spec, t0);
         Decision b = store().evaluateAndConsume(key("X"), spec, t0);

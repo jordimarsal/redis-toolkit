@@ -33,7 +33,7 @@ class GatewayShutdownTest {
     }
 
     @Test
-    void stop_closesInjectedResource() {
+    void stopClosesInjectedResource() {
         AtomicBoolean closed = new AtomicBoolean(false);
         Clock clock = () -> T0;
         RateLimiterService service = new RateLimiterService(clock, new InMemoryQuotaStore());

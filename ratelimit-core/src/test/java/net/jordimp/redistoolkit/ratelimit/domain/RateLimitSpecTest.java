@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 class RateLimitSpecTest {
 
     @Test
-    void r01_rejectsNonPositiveLimit() {
+    void r01RejectsNonPositiveLimit() {
         Duration oneMinute = Duration.ofMinutes(1);
         assertThatThrownBy(() -> RateLimitSpec.of(0, oneMinute, 1))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -19,7 +19,7 @@ class RateLimitSpecTest {
     }
 
     @Test
-    void r02_exposesImmutableValuesAndValueEquality() {
+    void r02ExposesImmutableValuesAndValueEquality() {
         RateLimitSpec a = new RateLimitSpec(10, Duration.ofSeconds(30), 20);
         RateLimitSpec b = new RateLimitSpec(10, Duration.ofSeconds(30), 20);
         assertThat(a.limit()).isEqualTo(10);
@@ -31,7 +31,7 @@ class RateLimitSpecTest {
     }
 
     @Test
-    void r03_perMinuteFactory() {
+    void r03PerMinuteFactory() {
         RateLimitSpec p = RateLimitSpec.perMinute(42);
         assertThat(p.limit()).isEqualTo(42);
         assertThat(p.refillWindow()).isEqualTo(Duration.ofSeconds(60));

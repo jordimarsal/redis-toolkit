@@ -53,7 +53,7 @@ class BenchmarkRunnerTest {
     }
 
     @Test
-    void run_reportsAllOkAndMachineReadableSummary_whenGatewayServesUnderLimit() throws Exception {
+    void runReportsAllOkAndMachineReadableSummaryWhenGatewayServesUnderLimit() throws Exception {
         BenchmarkRunner.Summary summary = BenchmarkRunner.run("http://localhost:" + port, 200);
 
         assertThat(summary.ok()).isEqualTo(200);
@@ -66,14 +66,14 @@ class BenchmarkRunnerTest {
     }
 
     @Test
-    void run_throwsIllegalState_whenGatewayUnreachable() {
+    void runThrowsIllegalStateWhenGatewayUnreachable() {
         assertThatThrownBy(() -> BenchmarkRunner.run("http://localhost:1", 5))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("unreachable");
     }
 
     @Test
-    void percentile_clampsIndexIntoBounds() {
+    void percentileClampsIndexIntoBounds() {
         List<Double> values = List.of(10.0, 20.0, 30.0, 40.0, 50.0);
 
         assertThat(BenchmarkRunner.percentile(values, 0.0)).isEqualTo(10.0);
@@ -83,7 +83,7 @@ class BenchmarkRunnerTest {
     }
 
     @Test
-    void percentile_clampsLowQuantileToFirstElement() {
+    void percentileClampsLowQuantileToFirstElement() {
         List<Double> values = List.of(1.0, 2.0, 3.0);
 
         assertThat(BenchmarkRunner.percentile(values, -1.0)).isEqualTo(1.0);

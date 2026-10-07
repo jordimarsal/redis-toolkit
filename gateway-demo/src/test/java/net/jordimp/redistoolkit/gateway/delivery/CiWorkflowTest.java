@@ -23,7 +23,7 @@ class CiWorkflowTest {
     }
 
     @Test
-    void runsMvnTestOnPushAndPullRequest_withConcurrencyGroup() throws Exception {
+    void runsMvnTestOnPushAndPullRequestWithConcurrencyGroup() throws Exception {
         Map<String, Object> doc = workflow();
 
         Map<String, Object> on = asMap(doc.get("on"));

@@ -48,7 +48,7 @@ class RedisQuotaStoreContractTest extends QuotaStoreContractTest {
     }
 
     @Test
-    void r5_multi_replicas_share_one_global_budget() {
+    void r5MultiReplicasShareOneGlobalBudget() {
         Instant t0 = Instant.parse("2024-01-01T00:00:00Z");
         RateLimitSpec spec = RateLimitSpec.of(10, Duration.ofMinutes(1), 10); // 10 tokens totals
         QuotaKey k = new QuotaKey("shared-user", Dimension.TENANT);
