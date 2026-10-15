@@ -354,7 +354,7 @@ Full details and discarded alternatives live in
 ## Project conventions
 
 This repo was built with the
-[harness-standard](https://github.com/jordimarsal/harness-standard) harness: Spec Driven Development
+[harness](https://github.com/jordimarsal/harness) harness: Spec Driven Development
 with a human approval gate before any code, and every requirement `R<n>` backed by at least one
 passing test.
 
